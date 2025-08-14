@@ -40,7 +40,7 @@ fi
 max_len=20
 
 # Download directory for pre-trained models
-download_dir=download/
+download_dir=download
 
 # We suppose you have two TSV files: "data/raw/custom_train.tsv" and 
 # "data/raw/custom_dev.tsv", where "custom" is your dataset name, 
@@ -132,8 +132,9 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
             --base-lr 0.0001 \
             --num-iters 10000 \
             --save-every-n 1000 \
-            --max-duration 50 \
+            --max-duration 100 \
             --max-len ${max_len} \
+            --min-len 0.1 \
             --model-config ${download_dir}/zipvoice/model.json \
             --checkpoint ${download_dir}/zipvoice/model.pt \
             --tokenizer ${tokenizer} \
