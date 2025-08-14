@@ -130,6 +130,7 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
             --use-fp16 1 \
             --finetune 1 \
             --base-lr 0.00004 \
+            --num-epochs 8 \
             --num-iters 10000 \
             --save-every-n 1000 \
             --max-duration 700 \
