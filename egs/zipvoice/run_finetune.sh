@@ -129,10 +129,10 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
             --world-size 1 \
             --use-fp16 1 \
             --finetune 1 \
-            --base-lr 0.0001 \
+            --base-lr 0.00004 \
             --num-iters 10000 \
             --save-every-n 1000 \
-            --max-duration 100 \
+            --max-duration 700 \
             --max-len ${max_len} \
             --min-len 0.1 \
             --model-config ${download_dir}/zipvoice/model.json \
