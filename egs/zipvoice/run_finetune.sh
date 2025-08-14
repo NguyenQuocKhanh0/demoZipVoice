@@ -3,7 +3,7 @@
 # This script is an example of fine-tuning ZipVoice on your custom datasets.
 
 # Add project root to PYTHONPATH
-export PYTHONPATH=../../:$PYTHONPATH
+# export PYTHONPATH=../../:$PYTHONPATH
 
 # Set bash to 'debug' mode, it will exit on:
 # -e 'error', -u 'undefined variable', -o ... 'error in pipeline', -x 'print commands',
@@ -15,15 +15,15 @@ stage=1
 stop_stage=6
 
 # Number of jobs for data preparation
-nj=20
+nj=2
 
 # Whether the language of training data is one of Chinese and English
-is_zh_en=1
+is_zh_en=0
 
 # Language identifier, used when language is not Chinese or English
 # see https://github.com/rhasspy/espeak-ng/blob/master/docs/languages.md
 # Example of French: lang=fr
-lang=default
+lang=vi
 
 if [ $is_zh_en -eq 1 ]; then
       tokenizer=emilia
@@ -104,19 +104,19 @@ if [ $stage -le 3 ] && [ $stop_stage -ge 3 ]; then
       done
 fi
 
-if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
-      echo "Stage 4: Download pre-trained model, tokens file, and model config"
-      # Uncomment this line to use HF mirror
-      # export HF_ENDPOINT=https://hf-mirror.com
-      hf_repo=k2-fsa/ZipVoice
-      mkdir -p ${download_dir}
-      for file in model.pt tokens.txt model.json; do
-            huggingface-cli download \
-                  --local-dir ${download_dir} \
-                  ${hf_repo} \
-                  zipvoice/${file}
-      done
-fi
+# if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
+#       echo "Stage 4: Download pre-trained model, tokens file, and model config"
+#       # Uncomment this line to use HF mirror
+#       # export HF_ENDPOINT=https://hf-mirror.com
+#       hf_repo=k2-fsa/ZipVoice
+#       mkdir -p ${download_dir}
+#       for file in model.pt tokens.txt model.json; do
+#             huggingface-cli download \
+#                   --local-dir ${download_dir} \
+#                   ${hf_repo} \
+#                   zipvoice/${file}
+#       done
+# fi
 
 ### Training ZipVoice (5 - 6)
 
