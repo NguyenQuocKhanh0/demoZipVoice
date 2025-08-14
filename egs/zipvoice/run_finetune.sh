@@ -132,7 +132,7 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
             --base-lr 0.0001 \
             --num-iters 10000 \
             --save-every-n 1000 \
-            --max-duration 500 \
+            --max-duration 50 \
             --max-len ${max_len} \
             --model-config ${download_dir}/zipvoice/model.json \
             --checkpoint ${download_dir}/zipvoice/model.pt \
