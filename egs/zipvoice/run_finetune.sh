@@ -118,58 +118,58 @@ fi
 #       done
 # fi
 
-### Training ZipVoice (5 - 6)
+# ### Training ZipVoice (5 - 6)
 
-if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
-      echo "Stage 5: Fine-tune the ZipVoice model"
+# if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
+#       echo "Stage 5: Fine-tune the ZipVoice model"
 
-      [ -z "$max_len" ] && { echo "Error: max_len is not set!" >&2; exit 1; }
+#       [ -z "$max_len" ] && { echo "Error: max_len is not set!" >&2; exit 1; }
 
-      python3 -m zipvoice.bin.train_zipvoice \
-            --world-size 1 \
-            --use-fp16 1 \
-            --finetune 1 \
-            --base-lr 0.00004 \
-            --num-epochs 8 \
-            --num-iters 10000 \
-            --save-every-n 1000 \
-            --max-duration 700 \
-            --max-len ${max_len} \
-            --min-len 0.1 \
-            --model-config ${download_dir}/zipvoice/model.json \
-            --checkpoint ${download_dir}/zipvoice/model.pt \
-            --tokenizer ${tokenizer} \
-            --lang ${lang} \
-            --token-file ${download_dir}/zipvoice/tokens.txt \
-            --dataset custom \
-            --train-manifest data/fbank/custom-finetune_cuts_train.jsonl.gz \
-            --dev-manifest data/fbank/custom-finetune_cuts_dev.jsonl.gz \
-            --exp-dir exp/zipvoice_finetune
+#       python3 -m zipvoice.bin.train_zipvoice \
+#             --world-size 1 \
+#             --use-fp16 1 \
+#             --finetune 1 \
+#             --base-lr 0.00004 \
+#             --num-epochs 8 \
+#             --num-iters 10000 \
+#             --save-every-n 1000 \
+#             --max-duration 700 \
+#             --max-len ${max_len} \
+#             --min-len 0.1 \
+#             --model-config ${download_dir}/zipvoice/model.json \
+#             --checkpoint ${download_dir}/zipvoice/model.pt \
+#             --tokenizer ${tokenizer} \
+#             --lang ${lang} \
+#             --token-file ${download_dir}/zipvoice/tokens.txt \
+#             --dataset custom \
+#             --train-manifest data/fbank/custom-finetune_cuts_train.jsonl.gz \
+#             --dev-manifest data/fbank/custom-finetune_cuts_dev.jsonl.gz \
+#             --exp-dir exp/zipvoice_finetune
 
-fi
+# fi
 
-if [ ${stage} -le 6 ] && [ ${stop_stage} -ge 6 ]; then
-      echo "Stage 6: Average the checkpoints for ZipVoice"
-      python3 -m zipvoice.bin.generate_averaged_model \
-            --iter 10000 \
-            --avg 2 \
-            --model-name zipvoice \
-            --exp-dir exp/zipvoice_finetune
-      # The generated model is exp/zipvoice_finetune/iter-10000-avg-2.pt
-fi
+# if [ ${stage} -le 6 ] && [ ${stop_stage} -ge 6 ]; then
+#       echo "Stage 6: Average the checkpoints for ZipVoice"
+#       python3 -m zipvoice.bin.generate_averaged_model \
+#             --iter 10000 \
+#             --avg 2 \
+#             --model-name zipvoice \
+#             --exp-dir exp/zipvoice_finetune
+#       # The generated model is exp/zipvoice_finetune/iter-10000-avg-2.pt
+# fi
 
-### Inference with PyTorch models (7)
+# ### Inference with PyTorch models (7)
 
-if [ ${stage} -le 7 ] && [ ${stop_stage} -ge 7 ]; then
-      echo "Stage 7: Inference of the ZipVoice model"
+# if [ ${stage} -le 7 ] && [ ${stop_stage} -ge 7 ]; then
+#       echo "Stage 7: Inference of the ZipVoice model"
 
-      python3 -m zipvoice.bin.infer_zipvoice \
-            --model-name zipvoice \
-            --model-dir exp/zipvoice_finetune/ \
-            --checkpoint-name iter-10000-avg-2.pt \
-            --tokenizer ${tokenizer} \
-            --lang ${lang} \
-            --test-list test.tsv \
-            --res-dir results/test_finetune\
-            --num-step 16
-fi
+#       python3 -m zipvoice.bin.infer_zipvoice \
+#             --model-name zipvoice \
+#             --model-dir exp/zipvoice_finetune/ \
+#             --checkpoint-name iter-10000-avg-2.pt \
+#             --tokenizer ${tokenizer} \
+#             --lang ${lang} \
+#             --test-list test.tsv \
+#             --res-dir results/test_finetune\
+#             --num-step 16
+# fi
