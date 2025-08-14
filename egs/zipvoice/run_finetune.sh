@@ -126,7 +126,7 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
       [ -z "$max_len" ] && { echo "Error: max_len is not set!" >&2; exit 1; }
 
       python3 -m zipvoice.bin.train_zipvoice \
-            --world-size 4 \
+            --world-size 1 \
             --use-fp16 1 \
             --finetune 1 \
             --base-lr 0.0001 \
