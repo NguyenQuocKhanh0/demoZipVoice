@@ -15,7 +15,7 @@ stage=1
 stop_stage=6
 
 # Number of jobs for data preparation
-nj=2
+nj=8
 
 # Whether the language of training data is one of Chinese and English
 is_zh_en=0
