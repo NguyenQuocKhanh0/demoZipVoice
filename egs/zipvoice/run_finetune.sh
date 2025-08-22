@@ -130,9 +130,9 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
             --use-fp16 1 \
             --finetune 1 \
             --base-lr 0.00004 \
-            --num-epochs 8 \
-            --num-iters 10000 \
-            --save-every-n 1000 \
+            --num-epochs 1 \
+            --save-every-n 2000 \
+            --keep-last-k 5 \
             --max-duration 700 \
             --max-len ${max_len} \
             --min-len 0.1 \
@@ -158,18 +158,18 @@ if [ ${stage} -le 6 ] && [ ${stop_stage} -ge 6 ]; then
       # The generated model is exp/zipvoice_finetune/iter-10000-avg-2.pt
 fi
 
-### Inference with PyTorch models (7)
+# ### Inference with PyTorch models (7)
 
-if [ ${stage} -le 7 ] && [ ${stop_stage} -ge 7 ]; then
-      echo "Stage 7: Inference of the ZipVoice model"
+# if [ ${stage} -le 7 ] && [ ${stop_stage} -ge 7 ]; then
+#       echo "Stage 7: Inference of the ZipVoice model"
 
-      python3 -m zipvoice.bin.infer_zipvoice \
-            --model-name zipvoice \
-            --model-dir exp/zipvoice_finetune/ \
-            --checkpoint-name iter-10000-avg-2.pt \
-            --tokenizer ${tokenizer} \
-            --lang ${lang} \
-            --test-list test.tsv \
-            --res-dir results/test_finetune\
-            --num-step 16
-fi
+#       python3 -m zipvoice.bin.infer_zipvoice \
+#             --model-name zipvoice \
+#             --model-dir exp/zipvoice_finetune/ \
+#             --checkpoint-name iter-10000-avg-2.pt \
+#             --tokenizer ${tokenizer} \
+#             --lang ${lang} \
+#             --test-list test.tsv \
+#             --res-dir results/test_finetune\
+#             --num-step 16
+# fi
