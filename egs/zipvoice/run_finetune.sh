@@ -52,73 +52,73 @@ download_dir=download
 #     to part of the wav. The start_time and end_time specify the start and end
 #     times of the text within the wav, which should be in seconds.
 # > Note: {uniq_id} must be unique for each line.
-for subset in train dev;do
-      file_path=data/raw/custom_${subset}.tsv
-      [ -f "$file_path" ] || { echo "Error: expect $file_path !" >&2; exit 1; }
-done
+# for subset in train dev;do
+#       file_path=data/raw/custom_${subset}.tsv
+#       [ -f "$file_path" ] || { echo "Error: expect $file_path !" >&2; exit 1; }
+# done
 
-### Prepare the training data (1 - 4)
+# ### Prepare the training data (1 - 4)
 
-if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
-      echo "Stage 1: Prepare manifests for custom dataset from tsv files"
+# if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
+#       echo "Stage 1: Prepare manifests for custom dataset from tsv files"
 
-      for subset in train dev;do
-            python3 -m zipvoice.bin.prepare_dataset \
-                  --tsv-path data/raw/custom_${subset}.tsv \
-                  --prefix custom-finetune \
-                  --subset raw_${subset} \
-                  --num-jobs ${nj} \
-                  --output-dir data/manifests
-      done
-      # The output manifest files are "data/manifests/custom-finetune_cuts_raw_train.jsonl.gz".
-      # and "data/manifests/custom-finetune_cuts_raw_dev.jsonl.gz".
-fi
+#       for subset in train dev;do
+#             python3 -m zipvoice.bin.prepare_dataset \
+#                   --tsv-path data/raw/custom_${subset}.tsv \
+#                   --prefix custom-finetune \
+#                   --subset raw_${subset} \
+#                   --num-jobs ${nj} \
+#                   --output-dir data/manifests
+#       done
+#       # The output manifest files are "data/manifests/custom-finetune_cuts_raw_train.jsonl.gz".
+#       # and "data/manifests/custom-finetune_cuts_raw_dev.jsonl.gz".
+# fi
 
 
-if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
-      echo "Stage 2: Add tokens to manifests"
-      # For "emilia" and "espeak" tokenizers, it's better to prepare the tokens 
-      # before training. Otherwise, the on-the-fly tokenization can significantly
-      # slow down the training.
-      for subset in train dev;do
-            python3 -m zipvoice.bin.prepare_tokens \
-                  --input-file data/manifests/custom-finetune_cuts_raw_${subset}.jsonl.gz \
-                  --output-file data/manifests/custom-finetune_cuts_${subset}.jsonl.gz \
-                  --tokenizer ${tokenizer} \
-                  --lang ${lang}
-      done
-      # The output manifest files are "data/manifests/custom-finetune_cuts_train.jsonl.gz".
-      # and "data/manifests/custom-finetune_cuts_dev.jsonl.gz".
-fi
+# if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
+#       echo "Stage 2: Add tokens to manifests"
+#       # For "emilia" and "espeak" tokenizers, it's better to prepare the tokens 
+#       # before training. Otherwise, the on-the-fly tokenization can significantly
+#       # slow down the training.
+#       for subset in train dev;do
+#             python3 -m zipvoice.bin.prepare_tokens \
+#                   --input-file data/manifests/custom-finetune_cuts_raw_${subset}.jsonl.gz \
+#                   --output-file data/manifests/custom-finetune_cuts_${subset}.jsonl.gz \
+#                   --tokenizer ${tokenizer} \
+#                   --lang ${lang}
+#       done
+#       # The output manifest files are "data/manifests/custom-finetune_cuts_train.jsonl.gz".
+#       # and "data/manifests/custom-finetune_cuts_dev.jsonl.gz".
+# fi
 
-if [ $stage -le 3 ] && [ $stop_stage -ge 3 ]; then
-      echo "Stage 3: Compute Fbank for custom dataset"
-      # You can skip this step and use `--on-the-fly-feats 1` in training stage
-      for subset in train dev; do
-            python3 -m zipvoice.bin.compute_fbank \
-                  --source-dir data/manifests \
-                  --dest-dir data/fbank \
-                  --dataset custom-finetune \
-                  --subset ${subset} \
-                  --num-jobs ${nj}
-      done
-fi
-
-# if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
-#       echo "Stage 4: Download pre-trained model, tokens file, and model config"
-#       # Uncomment this line to use HF mirror
-#       # export HF_ENDPOINT=https://hf-mirror.com
-#       hf_repo=k2-fsa/ZipVoice
-#       mkdir -p ${download_dir}
-#       for file in model.pt tokens.txt model.json; do
-#             huggingface-cli download \
-#                   --local-dir ${download_dir} \
-#                   ${hf_repo} \
-#                   zipvoice/${file}
+# if [ $stage -le 3 ] && [ $stop_stage -ge 3 ]; then
+#       echo "Stage 3: Compute Fbank for custom dataset"
+#       # You can skip this step and use `--on-the-fly-feats 1` in training stage
+#       for subset in train dev; do
+#             python3 -m zipvoice.bin.compute_fbank \
+#                   --source-dir data/manifests \
+#                   --dest-dir data/fbank \
+#                   --dataset custom-finetune \
+#                   --subset ${subset} \
+#                   --num-jobs ${nj}
 #       done
 # fi
 
-# ### Training ZipVoice (5 - 6)
+# # if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
+# #       echo "Stage 4: Download pre-trained model, tokens file, and model config"
+# #       # Uncomment this line to use HF mirror
+# #       # export HF_ENDPOINT=https://hf-mirror.com
+# #       hf_repo=k2-fsa/ZipVoice
+# #       mkdir -p ${download_dir}
+# #       for file in model.pt tokens.txt model.json; do
+# #             huggingface-cli download \
+# #                   --local-dir ${download_dir} \
+# #                   ${hf_repo} \
+# #                   zipvoice/${file}
+# #       done
+# # fi
+
+# # ### Training ZipVoice (5 - 6)
 
 if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
       echo "Stage 5: Fine-tune the ZipVoice model"
