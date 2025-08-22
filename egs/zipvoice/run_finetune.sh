@@ -142,8 +142,8 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
             --lang ${lang} \
             --token-file ${download_dir}/zipvoice/tokens.txt \
             --dataset custom \
-            --train-manifest data/fbank/custom-finetune_cuts_train.jsonl.gz \
-            --dev-manifest data/fbank/custom-finetune_cuts_dev.jsonl.gz \
+            --train-manifest data/fbank/train_all.jsonl.gz \
+            --dev-manifest data/fbank/dev_all.jsonl.gz \
             --exp-dir exp/zipvoice_finetune
 
 fi
