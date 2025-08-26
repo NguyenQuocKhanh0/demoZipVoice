@@ -295,39 +295,52 @@ class ZipVoice(nn.Module):
         speed: float,
     ):
         """
-        Process text for inference, given text tokens and prompts,
-        feature lengths are predicted with the ratio of token numbers.
+        Process text for inference, length ước lượng theo số khoảng trắng (token=3) + 1.
         """
         device = (
             self.device if isinstance(self, DDP) else next(self.parameters()).device
         )
-
+    
         cat_tokens = [
             prompt_token + token for prompt_token, token in zip(prompt_tokens, tokens)
         ]
-
+    
         prompt_tokens_lens = torch.tensor(
             [len(token) for token in prompt_tokens],
             dtype=torch.int64,
             device=device,
         )
-
+    
         tokens_lens = torch.tensor(
             [len(token) for token in tokens],
             dtype=torch.int64,
             device=device,
         )
-
+    
+        # 🔑 số khoảng trắng + 1
+        prompt_space_lens = torch.tensor(
+            [sum(1 for t in token if t == 3) + 1 for token in prompt_tokens],
+            dtype=torch.int64,
+            device=device,
+        )
+        tokens_space_lens = torch.tensor(
+            [sum(1 for t in token if t == 3) + 1 for token in tokens],
+            dtype=torch.int64,
+            device=device,
+        )
+    
         cat_embed, cat_tokens_lens = self.forward_text_embed(cat_tokens)
-
+    
+        # frames_per_word * số_word_trong_text
         features_lens = prompt_features_lens + torch.ceil(
-            (prompt_features_lens / prompt_tokens_lens * tokens_lens / speed)
+            (prompt_features_lens / prompt_space_lens * tokens_space_lens / speed)
         ).to(dtype=torch.int64)
-
+    
         text_condition, padding_mask = self.forward_text_condition(
             cat_embed, cat_tokens_lens, features_lens
         )
         return text_condition, padding_mask
+    
 
     def forward(
         self,
