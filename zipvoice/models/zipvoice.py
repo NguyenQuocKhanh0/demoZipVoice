@@ -321,6 +321,8 @@ class ZipVoice(nn.Module):
         prompt_tokens: List[List[int]],
         prompt_features_lens: torch.Tensor,
         speed: float,
+        num_space_text=[-1],
+        num_space_prompt=[-1]
     ):
         """
         Process text for inference, length ước lượng theo số khoảng trắng (token=3) + 1.
@@ -347,15 +349,17 @@ class ZipVoice(nn.Module):
     
         # 🔑 số khoảng trắng + 1
         prompt_space_lens = torch.tensor(
-            [score_tokens(token)*100 for token in prompt_tokens],
+            [(score_tokens(token)-(token.count(3) - numsp)])*100 for token, numsp in zip(prompt_tokens,num_space_prompt)],
             dtype=torch.int64,
             device=device,
         )
         tokens_space_lens = torch.tensor(
-            [score_tokens(token)*100 for token in tokens],
+            [(score_tokens(token)-(token.count(3) - numsp)])*100 for token, numsp in zip (tokens,num_space_text)],
             dtype=torch.int64,
             device=device,
         )
+        print("tokens_space_lens: ", tokens_space_lens)
+        print("prompt_space_lens: ", prompt_space_lens)
     
         cat_embed, cat_tokens_lens = self.forward_text_embed(cat_tokens)
     
@@ -438,6 +442,8 @@ class ZipVoice(nn.Module):
         duration: str = "predict",
         num_step: int = 5,
         guidance_scale: float = 0.5,
+        num_space_text=[-1],
+        num_space_prompt=[-1]
     ) -> torch.Tensor:
         """
         Generate acoustic features, given text tokens, prompts feature
@@ -468,6 +474,8 @@ class ZipVoice(nn.Module):
                 prompt_tokens=prompt_tokens,
                 prompt_features_lens=prompt_features_lens,
                 speed=speed,
+                num_space_text=num_space_text,
+                num_space_prompt=num_space_prompt,
             )
         else:
             assert features_lens is not None
