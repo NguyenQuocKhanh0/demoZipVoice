@@ -349,12 +349,12 @@ class ZipVoice(nn.Module):
     
         # 🔑 số khoảng trắng + 1
         prompt_space_lens = torch.tensor(
-            [(score_tokens(token)-(token.count(3) - numsp)])*100 for token, numsp in zip(prompt_tokens,num_space_prompt)],
+            [(score_tokens(token)-(token.count(3) - numsp))*100 for token, numsp in zip(prompt_tokens,num_space_prompt)],
             dtype=torch.int64,
             device=device,
         )
         tokens_space_lens = torch.tensor(
-            [(score_tokens(token)-(token.count(3) - numsp)])*100 for token, numsp in zip (tokens,num_space_text)],
+            [(score_tokens(token)-(token.count(3) - numsp))*100 for token, numsp in zip (tokens,num_space_text)],
             dtype=torch.int64,
             device=device,
         )
