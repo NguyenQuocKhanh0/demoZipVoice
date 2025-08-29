@@ -51,7 +51,7 @@ def score_tokens(A):
                     # print(f"{segment[-1]} in B")
                     count += 1
                 if count > 0:
-                    total_score += 1 + (count - 1) * 0.5
+                    total_score += 1 + (count - 1) * 0.85
             segment = []
         else:
             segment.append(t)
@@ -347,12 +347,12 @@ class ZipVoice(nn.Module):
     
         # 🔑 số khoảng trắng + 1
         prompt_space_lens = torch.tensor(
-            [score_tokens(token)*2 for token in prompt_tokens],
+            [score_tokens(token)*100 for token in prompt_tokens],
             dtype=torch.int64,
             device=device,
         )
         tokens_space_lens = torch.tensor(
-            [score_tokens(token)*2 for token in tokens],
+            [score_tokens(token)*100 for token in tokens],
             dtype=torch.int64,
             device=device,
         )
@@ -361,7 +361,7 @@ class ZipVoice(nn.Module):
     
         # frames_per_word * số_word_trong_text
         features_lens = prompt_features_lens + torch.ceil(
-            (prompt_features_lens / prompt_space_lens * tokens_space_lens / speed *1.08)
+            (prompt_features_lens / prompt_space_lens * tokens_space_lens / speed *1.09)
         ).to(dtype=torch.int64)
     
         text_condition, padding_mask = self.forward_text_condition(
