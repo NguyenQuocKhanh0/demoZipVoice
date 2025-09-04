@@ -64,6 +64,7 @@ from zipvoice.tokenizer.tokenizer import (
     EspeakTokenizer,
     LibriTTSTokenizer,
     SimpleTokenizer,
+    SimpleTokenizer2,
 )
 from zipvoice.utils.checkpoint import (
     load_checkpoint,
@@ -908,6 +909,8 @@ def run(rank, world_size, args):
         tokenizer = LibriTTSTokenizer(token_file=params.token_file)
     elif params.tokenizer == "espeak":
         tokenizer = EspeakTokenizer(token_file=params.token_file, lang=params.lang)
+    elif params.tokenizer == "simple2":
+        tokenizer = SimpleTokenizer2(token_file=params.token_file, lang=params.lang)
     else:
         assert params.tokenizer == "simple"
         tokenizer = SimpleTokenizer(token_file=params.token_file)
