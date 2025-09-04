@@ -349,7 +349,6 @@ def get_parser():
         "--tokenizer",
         type=str,
         default="emilia",
-        choices=["emilia", "libritts", "espeak", "simple"],
         help="Tokenizer type.",
     )
 
