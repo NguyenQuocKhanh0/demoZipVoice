@@ -910,7 +910,7 @@ def run(rank, world_size, args):
     elif params.tokenizer == "espeak":
         tokenizer = EspeakTokenizer(token_file=params.token_file, lang=params.lang)
     elif params.tokenizer == "simple2":
-        tokenizer = SimpleTokenizer2(token_file=params.token_file, lang=params.lang)
+        tokenizer = SimpleTokenizer2(token_file=params.token_file)
     else:
         assert params.tokenizer == "simple"
         tokenizer = SimpleTokenizer(token_file=params.token_file)
