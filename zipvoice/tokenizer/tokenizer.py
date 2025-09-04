@@ -743,6 +743,8 @@ def add_tokens(cut_set: CutSet, tokenizer: str, lang: str):
         tokenizer = LibriTTSTokenizer()
     elif tokenizer == "simple":
         tokenizer = SimpleTokenizer()
+    elif tokenizer == "simple2":
+        tokenizer = SimpleTokenizer2()
     else:
         raise ValueError(f"Unsupported tokenizer: {tokenizer}.")
 
