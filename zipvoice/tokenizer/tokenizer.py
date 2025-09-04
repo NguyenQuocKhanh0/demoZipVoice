@@ -63,6 +63,7 @@ import logging
 from typing import List, Dict, Optional
 
 def text_to_phoneme_simple(text: str) -> str:
+    text = text.lower()
     mapping = {
         "nh": "ɲ",
         "đ": "ɗ",
