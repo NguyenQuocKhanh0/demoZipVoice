@@ -65,6 +65,7 @@ from typing import List, Dict, Optional
 def text_to_phoneme_simple(text: str) -> str:
     mapping = {
         "nh": "ɲ",
+        "đ": "ɗ",
         
         # u, ư
         "u": "u",
