@@ -66,7 +66,7 @@ def text_to_phoneme_simple(text: str) -> str:
     mapping = {
         "nh": "ɲ",
         "đ": "ɗ",
-        
+
         # u, ư
         "u": "u",
         "ú": "u3", "ù": "u2", "ủ": "u4", "ũ": "u5", "ụ": "u6",
@@ -100,6 +100,7 @@ def text_to_phoneme_simple(text: str) -> str:
         "í": "i3", "ì": "i2", "ỉ": "i4", "ĩ": "i5", "ị": "i6",
         "y": "y",
         "ý": "y3", "ỳ": "y2", "ỷ": "y4", "ỹ": "y5", "ỵ": "y6",
+        '́': "3",
     }
 
     # Ưu tiên key dài hơn (vd: "nh" > "n")
