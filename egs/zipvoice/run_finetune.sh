@@ -26,9 +26,9 @@ is_zh_en=0
 lang=vi
 
 if [ $is_zh_en -eq 1 ]; then
-      tokenizer=emilia
+      tokenizer=simple2
 else
-      tokenizer=espeak
+      tokenizer=simple2
       [ "$lang" = "default" ] && { echo "Error: lang is not set!" >&2; exit 1; }
 fi
 
