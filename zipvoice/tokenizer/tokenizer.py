@@ -59,6 +59,127 @@ class Tokenizer(ABC):
         """Convert list of token sequences to list of token id sequences."""
         raise NotImplementedError
 
+import logging
+from typing import List, Dict, Optional
+
+def text_to_phoneme_simple(text: str) -> str:
+    mapping = {
+        "nh": "ɲ",
+        
+        # u, ư
+        "u": "u",
+        "ú": "u3", "ù": "u2", "ủ": "u4", "ũ": "u5", "ụ": "u6",
+        "ư": "'u",
+        "ứ": "'u3", "ừ": "'u2", "ử": "'u4", "ữ": "'u5", "ự": "'u6",
+
+        # e, ê
+        "e": "e",
+        "é": "e3", "è": "e2", "ẻ": "e4", "ẽ": "e5", "ẹ": "e6",
+        "ê": "'e",
+        "ế": "'e3", "ề": "'e2", "ể": "'e4", "ễ": "'e5", "ệ": "'e6",
+
+        # o, ô, ơ
+        "o": "o",
+        "ó": "o3", "ò": "o2", "ỏ": "o4", "õ": "o5", "ọ": "o6",
+        "ô": "'o",
+        "ố": "'o3", "ồ": "'o2", "ổ": "'o4", "ỗ": "'o5", "ộ": "'o6",
+        "ơ": "əː",
+        "ớ": "əː3", "ờ": "əː2", "ở": "əː4", "ỡ": "əː5", "ợ": "əː6",
+
+        # a, ă, â
+        "a": "a",
+        "á": "a3", "à": "a2", "ả": "a4", "ã": "a5", "ạ": "a6",
+        "ă": "'a",
+        "ắ": "'a3", "ằ": "'a2", "ẳ": "'a4", "ẵ": "'a5", "ặ": "'a6",
+        "â": "'ə",
+        "ấ": "'ə3", "ầ": "'ə2", "ẩ": "'ə4", "ẫ": "'ə5", "ậ": "'ə6",
+
+        # i, y
+        "i": "i",
+        "í": "i3", "ì": "i2", "ỉ": "i4", "ĩ": "i5", "ị": "i6",
+        "y": "y",
+        "ý": "y3", "ỳ": "y2", "ỷ": "y4", "ỹ": "y5", "ỵ": "y6",
+    }
+
+    # Ưu tiên key dài hơn (vd: "nh" > "n")
+    keys_sorted = sorted(mapping.keys(), key=lambda x: -len(x))
+
+    result = ""
+    i = 0
+    while i < len(text):
+        matched = False
+        for k in keys_sorted:
+            if text[i:i+len(k)] == k:
+                result += mapping[k]
+                i += len(k)
+                matched = True
+                break
+        if not matched:
+            result += text[i]  # giữ nguyên nếu không có trong bảng
+            i += 1
+    return result
+
+
+class SimpleTokenizer2(Tokenizer):
+    """Tokenizer dựa trên phoneme: 
+    - chuyển text sang phoneme
+    - sau đó map từng ký tự phoneme sang id
+    """
+
+    def __init__(self, token_file: Optional[str] = None):
+        self.has_tokens = False
+        if token_file is None:
+            logging.debug(
+                "Initialize Tokenizer without tokens file, "
+                "will fail when map to ids."
+            )
+            return
+
+        self.token2id: Dict[str, int] = {}
+        with open(token_file, "r", encoding="utf-8") as f:
+            for line in f.readlines():
+                info = line.rstrip().split("\t")
+                token, id = info[0], int(info[1])
+                assert token not in self.token2id, token
+                self.token2id[token] = id
+
+        self.pad_id = self.token2id["_"]  # padding
+        self.vocab_size = len(self.token2id)
+        self.has_tokens = True
+
+    def texts_to_token_ids(
+        self,
+        texts: List[str],
+    ) -> List[List[int]]:
+        return self.tokens_to_token_ids(self.texts_to_tokens(texts))
+
+    def texts_to_tokens(
+        self,
+        texts: List[str],
+    ) -> List[List[str]]:
+        # Chuyển mỗi text thành phoneme trước khi tách ký tự
+        phoneme_texts = [text_to_phoneme_simple(t) for t in texts]
+        # print(phoneme_texts)
+        tokens_list = [list(p) for p in phoneme_texts]
+        return tokens_list
+
+    def tokens_to_token_ids(
+        self,
+        tokens_list: List[List[str]],
+    ) -> List[List[int]]:
+        assert self.has_tokens, "Please initialize Tokenizer with a tokens file."
+
+        token_ids_list = []
+        for tokens in tokens_list:
+            token_ids = []
+            for t in tokens:
+                if t not in self.token2id:
+                    print(f"OOV token skipped: {t}")
+                    continue
+                token_ids.append(self.token2id[t])
+            token_ids_list.append(token_ids)
+
+        return token_ids_list
 
 class SimpleTokenizer(Tokenizer):
     """The simplpest tokenizer, treat every character as a token,
