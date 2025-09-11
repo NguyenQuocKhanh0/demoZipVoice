@@ -365,7 +365,7 @@ class ZipVoice(nn.Module):
     
         # frames_per_word * số_word_trong_text
         features_lens = prompt_features_lens + torch.ceil(
-            (prompt_features_lens / prompt_space_lens * tokens_space_lens / speed *1.09)
+            (prompt_features_lens / prompt_space_lens * tokens_space_lens / speed)
         ).to(dtype=torch.int64)
     
         text_condition, padding_mask = self.forward_text_condition(
