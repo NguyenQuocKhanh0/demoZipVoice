@@ -51,7 +51,7 @@ def score_tokens(A):
                     # print(f"{segment[-1]} in B")
                     count += 1
                 if count > 0:
-                    total_score += 1 + (count - 1) * 0.75
+                    total_score += 1 + (count - 1) * 0.8
             segment = []
         else:
             segment.append(t)
@@ -362,10 +362,17 @@ class ZipVoice(nn.Module):
         print("prompt_space_lens: ", prompt_space_lens)
     
         cat_embed, cat_tokens_lens = self.forward_text_embed(cat_tokens)
-    
+        def alpha(prompt_space_lens: float) -> float:
+            if prompt_space_lens <= 1:
+                return 1.09
+            elif prompt_space_lens >= 30:
+                return 1.0
+            else:
+                return 1.09 - (prompt_space_lens - 1) / (30 - 1) * (1.09 - 1.0)
+
         # frames_per_word * số_word_trong_text
         features_lens = prompt_features_lens + torch.ceil(
-            (prompt_features_lens / prompt_space_lens * tokens_space_lens / speed)
+            (prompt_features_lens / prompt_space_lens * tokens_space_lens / speed * alpha(tokens_space_lens/100))
         ).to(dtype=torch.int64)
     
         text_condition, padding_mask = self.forward_text_condition(
