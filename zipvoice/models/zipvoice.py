@@ -51,7 +51,7 @@ def score_tokens(A):
                     # print(f"{segment[-1]} in B")
                     count += 1
                 if count > 0:
-                    total_score += 1 + (count - 1) * 0.8
+                    total_score += 1 + (count - 1) * 0.85
             segment = []
         else:
             segment.append(t)
