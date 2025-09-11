@@ -856,6 +856,7 @@ def tokenize_text(c: Cut, tokenizer):
         tokens = tokenizer.tokens_to_token_ids([c.supervisions[0].tokens])
     else:
         tokens = tokenizer.texts_to_token_ids([c.supervisions[0].text])
+        print("ko tìm được tokens")
     c.supervisions[0].tokens = tokens[0]
     return c
 
