@@ -364,11 +364,11 @@ class ZipVoice(nn.Module):
         cat_embed, cat_tokens_lens = self.forward_text_embed(cat_tokens)
         def alpha(prompt_space_lens: float) -> float:
             if prompt_space_lens <= 1:
-                return 1.09
+                return 1.1
             elif prompt_space_lens >= 30:
-                return 1.0
+                return 1.03
             else:
-                return 1.09 - (prompt_space_lens - 1) / (30 - 1) * (1.09 - 1.0)
+                return 1.1 - (prompt_space_lens - 1) / (30 - 1) * (1.1 - 1.03)
 
         # frames_per_word * số_word_trong_text
         features_lens = prompt_features_lens + torch.ceil(
