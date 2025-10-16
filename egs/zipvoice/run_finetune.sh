@@ -129,7 +129,7 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
             --world-size 1 \
             --use-fp16 1 \
             --finetune 1 \
-            --base-lr 0.000047 \
+            --base-lr 0.000077 \
             --num-epochs 3 \
             --save-every-n 1000 \
             --keep-last-k 5 \
