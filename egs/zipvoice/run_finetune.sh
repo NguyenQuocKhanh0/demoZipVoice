@@ -37,7 +37,7 @@ fi
 # Set `max_len` to 99% duration.
 
 # Maximum length (seconds) of the training utterance, will filter out longer utterances
-max_len=20
+max_len=30
 
 # Download directory for pre-trained models
 download_dir=download
