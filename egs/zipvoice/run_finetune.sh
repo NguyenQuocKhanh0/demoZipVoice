@@ -133,7 +133,7 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
             --num-epochs 2 \
             --save-every-n 1000 \
             --keep-last-k 4 \
-            --max-duration 600 \
+            --max-duration 650 \
             --max-len ${max_len} \
             --min-len 0.1 \
             --model-config ${download_dir}/zipvoice/model.json \
