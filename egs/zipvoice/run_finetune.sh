@@ -132,7 +132,7 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
             --base-lr 0.0001 \
             --num-epochs 1 \
             --save-every-n 1000 \
-            --keep-last-k 5 \
+            --keep-last-k 4 \
             --max-duration 600 \
             --max-len ${max_len} \
             --min-len 0.1 \
