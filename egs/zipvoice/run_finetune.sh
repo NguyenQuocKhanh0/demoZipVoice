@@ -37,7 +37,7 @@ fi
 # Set `max_len` to 99% duration.
 
 # Maximum length (seconds) of the training utterance, will filter out longer utterances
-max_len=30
+max_len=25
 
 # Download directory for pre-trained models
 download_dir=download
@@ -130,10 +130,10 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
             --use-fp16 1 \
             --finetune 1 \
             --base-lr 0.0001 \
-            --num-epochs 2 \
+            --num-epochs 1 \
             --save-every-n 1000 \
             --keep-last-k 5 \
-            --max-duration 740 \
+            --max-duration 600 \
             --max-len ${max_len} \
             --min-len 0.1 \
             --model-config ${download_dir}/zipvoice/model.json \
