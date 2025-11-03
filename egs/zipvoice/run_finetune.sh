@@ -135,7 +135,7 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
             --keep-last-k 4 \
             --max-duration 650 \
             --max-len ${max_len} \
-            --min-len 0.1 \
+            --min-len 1 \
             --model-config ${download_dir}/zipvoice/model.json \
             --checkpoint ${download_dir}/zipvoice/model.pt \
             --tokenizer ${tokenizer} \
