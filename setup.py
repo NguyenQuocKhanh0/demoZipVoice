@@ -1,6 +1,7 @@
 import os
 import subprocess
 import requests
+from dotenv import load_dotenv
 
 def run_cmd(cmd):
     print(f"🔹 Chạy lệnh: {cmd}")
@@ -18,11 +19,14 @@ def download_with_token(url, dest_path, token):
     print(f"✅ Đã tải: {dest_path}")
 
 def main():
+    # Load biến môi trường từ .env
+    load_dotenv()
     token = os.getenv("HF_TOKEN")
-    if not token:
-        raise EnvironmentError("Thiếu biến môi trường HF_TOKEN. Hãy đặt bằng: export HF_TOKEN=your_token")
 
-    # Đăng nhập Hugging Face CLI
+    if not token:
+        raise EnvironmentError("❌ Thiếu biến môi trường HF_TOKEN. Hãy tạo file .env với dòng:\nHF_TOKEN=hf_your_token_here")
+
+    # Đăng nhập vào Hugging Face CLI
     run_cmd(f"huggingface-cli login --token {token}")
 
     # Tạo thư mục chứa model
@@ -45,7 +49,7 @@ def main():
     else:
         print("⚠️ Không tìm thấy requirements.txt")
 
-    print("\n🎉 Hoàn tất setup!")
+    print("\n🎉 Setup hoàn tất!")
 
 if __name__ == "__main__":
     main()
