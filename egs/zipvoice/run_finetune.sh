@@ -129,7 +129,7 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
             --world-size 1 \
             --use-fp16 1 \
             --finetune 1 \
-            --base-lr 0.000053 \
+            --base-lr 0.000045 \
             --num-epochs 2 \
             --save-every-n 1000 \
             --keep-last-k 4 \
@@ -148,15 +148,15 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
 
 fi
 
-# if [ ${stage} -le 6 ] && [ ${stop_stage} -ge 6 ]; then
-#       echo "Stage 6: Average the checkpoints for ZipVoice"
-#       python3 -m zipvoice.bin.generate_averaged_model \
-#             --iter 10000 \
-#             --avg 2 \
-#             --model-name zipvoice \
-#             --exp-dir exp/zipvoice_finetune
-#       # The generated model is exp/zipvoice_finetune/iter-10000-avg-2.pt
-# fi
+if [ ${stage} -le 6 ] && [ ${stop_stage} -ge 6 ]; then
+      echo "Stage 6: Average the checkpoints for ZipVoice"
+      python3 -m zipvoice.bin.generate_averaged_model \
+            --iter 11000 \
+            --avg 2 \
+            --model-name zipvoice \
+            --exp-dir exp/zipvoice_finetune
+      # The generated model is exp/zipvoice_finetune/iter-10000-avg-2.pt
+fi
 
 # ### Inference with PyTorch models (7)
 
