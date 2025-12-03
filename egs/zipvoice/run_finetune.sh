@@ -12,7 +12,7 @@ set -u
 set -o pipefail
 
 stage=1
-stop_stage=6
+stop_stage=7
 
 # Number of jobs for data preparation
 nj=4
