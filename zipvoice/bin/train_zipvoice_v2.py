@@ -823,6 +823,7 @@ def scan_pessimistic_batches_for_oom(
 
 
 def tokenize_text(c: Cut, tokenizer):
+    print(c)
     if hasattr(c.supervisions[0], "tokens"):
         tokens = tokenizer.tokens_to_token_ids([c.supervisions[0].tokens])
     else:
