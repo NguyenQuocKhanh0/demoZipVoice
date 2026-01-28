@@ -20,7 +20,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 
 from zipvoice.models.modules.solver import EulerSolver
 from zipvoice.models.modules.zipformer import TTSZipformer
-from zipvoice.utils.common import (
+from zipvoice.utils.common_v2 import (
     condition_time_mask,
     get_tokens_index,
     make_pad_mask,
