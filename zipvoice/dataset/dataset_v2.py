@@ -33,6 +33,7 @@ class SpeechSynthesisDataset(torch.utils.data.Dataset):
         audio_token_dir: Optional[Union[str, Path]] = None,
         audio_token_pad: int = 0,
         audio_token_ext: str = ".pt",   # bạn có thể đổi sang ".npy" nếu muốn
+        return_features: bool = True,
     ) -> None:
         super().__init__()
 
@@ -124,10 +125,14 @@ class SpeechSynthesisDataset(torch.utils.data.Dataset):
         for transform in self.feature_transforms:
             features = transform(features)
 
-        batch = {
-            "features": features,
-            "features_lens": features_lens,
-        }
+        batch = {}
+        if self.return_features:
+            features, features_lens = self.feature_input_strategy(cuts)
+            for transform in self.feature_transforms:
+                features = transform(features)
+            batch["features"] = features
+            batch["features_lens"] = features_lens
+
 
         if self.return_audio_tokens:
             batch.update(self._load_audio_tokens_for_cuts(cuts))
