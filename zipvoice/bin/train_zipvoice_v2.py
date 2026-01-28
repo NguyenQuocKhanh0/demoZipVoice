@@ -822,15 +822,20 @@ def scan_pessimistic_batches_for_oom(
         )
 
 
+# def tokenize_text(c: Cut, tokenizer):
+#     # text là phoneme tokens cách nhau bởi space
+#     ph = c.supervisions[0].text.strip().split()
+#     ids = tokenizer.tokens_to_token_ids([ph])[0]
+#     c.supervisions[0].tokens = ids
+#     return c
+
 def tokenize_text(c: Cut, tokenizer):
-    print(c)
-    if hasattr(c.supervisions[0], "tokens"):
-        tokens = tokenizer.tokens_to_token_ids([c.supervisions[0].tokens])
-    else:
-        tokens = tokenizer.texts_to_token_ids([c.supervisions[0].text])
-        print("ko tìm được tokens")
-    c.supervisions[0].tokens = tokens[0]
+    text = c.supervisions[0].text
+    chars = list(text)              # mỗi ký tự Unicode = 1 token
+    ids = tokenizer.tokens_to_token_ids([chars])[0]
+    c.supervisions[0].tokens = ids
     return c
+
 
 
 def run(rank, world_size, args):
