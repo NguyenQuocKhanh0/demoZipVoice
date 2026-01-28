@@ -120,7 +120,7 @@ class SpeechSynthesisDataset(torch.utils.data.Dataset):
             cuts = transform(cuts)
 
         # vẫn có thể giữ features (để debug) hoặc tắt hẳn ở DataModule (khuyến nghị tắt để tiết kiệm)
-        features, features_lens = self.feature_input_strategy(cuts)
+        # features, features_lens = self.feature_input_strategy(cuts)
 
         for transform in self.feature_transforms:
             features = transform(features)
