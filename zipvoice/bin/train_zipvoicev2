@@ -57,8 +57,8 @@ from torch.optim import Optimizer
 from torch.utils.tensorboard import SummaryWriter
 
 import zipvoice.utils.diagnostics as diagnostics
-from zipvoice.dataset.datamodule import TtsDataModule
-from zipvoice.models.zipvoice import ZipVoice
+from zipvoice.dataset.datamodule_v2 import TtsDataModule
+from zipvoice.models.zipvoice_v2 import ZipVoiceTokenTTS
 from zipvoice.tokenizer.tokenizer import (
     EmiliaTokenizer,
     EspeakTokenizer,
@@ -74,7 +74,7 @@ from zipvoice.utils.checkpoint import (
     save_checkpoint_with_global_batch_idx,
     update_averaged_model,
 )
-from zipvoice.utils.common import (
+from zipvoice.utils.common_v2 import (
     AttributeDict,
     MetricsTracker,
     cleanup_dist,
@@ -422,70 +422,41 @@ def get_params() -> AttributeDict:
     return params
 
 
-def compute_fbank_loss(
+def compute_token_loss(
     params: AttributeDict,
     model: Union[nn.Module, DDP],
-    features: Tensor,
-    features_lens: Tensor,
+    audio_tokens: Tensor,        # [B,T,16] long
+    audio_tokens_lens: Tensor,   # [B]
     tokens: List[List[int]],
     is_training: bool,
 ) -> Tuple[Tensor, MetricsTracker]:
-    """
-    Compute loss given the model and its inputs.
-
-    Args:
-      params:
-        Parameters for training. See :func:`get_params`.
-      model:
-        The model for training.
-      features:
-        The target acoustic feature.
-      features_lens:
-        The number of frames of each utterance.
-      tokens:
-        Input tokens that representing the transcripts.
-      is_training:
-        True for training. False for validation. When it is True, this
-        function enables autograd during computation; when it is False, it
-        disables autograd.
-    """
 
     device = model.device if isinstance(model, DDP) else next(model.parameters()).device
+    B = audio_tokens.shape[0]
 
-    batch_size, num_frames, _ = features.shape
-
-    features = torch.nn.functional.pad(
-        features, (0, 0, 0, num_frames - features.size(1))
-    )  # (B, T, F)
-    noise = torch.randn_like(features)  # (B, T, F)
-
-    # Sampling t from uniform distribution
+    # sampling t
     if is_training:
-        t = torch.rand(batch_size, 1, 1, device=device)
+        t = torch.rand(B, 1, 1, device=device)
     else:
-        t = (
-            (torch.arange(batch_size, device=device) / batch_size)
-            .unsqueeze(1)
-            .unsqueeze(2)
-        )
-    with torch.set_grad_enabled(is_training):
+        t = (torch.arange(B, device=device) / B).unsqueeze(1).unsqueeze(2)
 
+    with torch.set_grad_enabled(is_training):
+        # noise=None để model tự tạo noise đúng shape [B,T,feat_dim]
         loss = model(
             tokens=tokens,
-            features=features,
-            features_lens=features_lens,
-            noise=noise,
+            audio_tokens=audio_tokens,
+            features_lens=audio_tokens_lens,
+            noise=None,
             t=t,
             condition_drop_ratio=params.condition_drop_ratio,
         )
 
-    assert loss.requires_grad == is_training
     info = MetricsTracker()
-    num_frames = features_lens.sum().item()
+    num_frames = audio_tokens_lens.sum().item()
     info["frames"] = num_frames
     info["loss"] = loss.detach().cpu().item() * num_frames
-
     return loss, info
+
 
 
 def train_one_epoch(
@@ -591,20 +562,21 @@ def train_one_epoch(
 
         batch_size = len(batch["text"])
 
-        tokens, features, features_lens = prepare_input(
+        tokens, audio_tokens, features_lens = prepare_input(
             params=params,
             batch=batch,
             device=device,
             return_tokens=True,
-            return_feature=True,
+            return_audio_tokens=True,   # <-- bạn phải implement
+            return_feature=False,
         )
 
         try:
             with torch_autocast(dtype=torch.float16, enabled=params.use_fp16):
-                loss, loss_info = compute_fbank_loss(
+                loss, loss_info = compute_token_loss(
                     params=params,
                     model=model,
-                    features=features,
+                    audio_tokens=audio_tokens,
                     features_lens=features_lens,
                     tokens=tokens,
                     is_training=True,
@@ -747,7 +719,7 @@ def compute_validation_loss(
             return_feature=True,
         )
 
-        loss, loss_info = compute_fbank_loss(
+        loss, loss_info = compute_token_loss(
             params=params,
             model=model,
             features=features,
@@ -814,20 +786,19 @@ def scan_pessimistic_batches_for_oom(
     batches, crit_values = find_pessimistic_batches(train_dl.sampler)
     for criterion, cuts in batches.items():
         batch = train_dl.dataset[cuts]
-        tokens, features, features_lens = prepare_input(
+        tokens, audio_tokens, features_lens = prepare_input(
             params=params,
             batch=batch,
             device=device,
             return_tokens=True,
-            return_feature=True,
+            return_audio_tokens=True,   # <-- bạn phải implement
         )
         try:
             with torch_autocast(dtype=torch.float16, enabled=params.use_fp16):
-
-                loss, loss_info = compute_fbank_loss(
+                loss, loss_info = compute_token_loss(
                     params=params,
                     model=model,
-                    features=features,
+                    audio_tokens=audio_tokens,
                     features_lens=features_lens,
                     tokens=tokens,
                     is_training=True,
@@ -923,9 +894,11 @@ def run(rank, world_size, args):
 
     logging.info("About to create model")
 
-    model = ZipVoice(
+    model = ZipVoiceTokenTTS(
         **model_config["model"],
         **tokenizer_config,
+        num_codebooks=16,
+        codebook_vocab=2048,
     )
 
     if params.checkpoint is not None:
