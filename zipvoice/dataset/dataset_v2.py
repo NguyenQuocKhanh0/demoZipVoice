@@ -51,6 +51,7 @@ class SpeechSynthesisDataset(torch.utils.data.Dataset):
         self.audio_token_dir = Path(audio_token_dir) if audio_token_dir is not None else None
         self.audio_token_pad = int(audio_token_pad)
         self.audio_token_ext = audio_token_ext
+        self.return_features = return_features
 
         if self.return_audio_tokens:
             assert self.audio_token_dir is not None, "audio_token_dir is required when return_audio_tokens=True"
