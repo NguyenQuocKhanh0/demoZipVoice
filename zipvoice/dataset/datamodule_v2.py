@@ -195,6 +195,7 @@ class TtsDataModule:
             return_audio_tokens=self.args.use_audio_tokens,
             audio_token_dir=self.args.audio_token_dir,
             audio_token_pad=self.args.audio_token_pad,
+            return_features=not self.args.use_audio_tokens,
         )
         
         if self.args.use_audio_tokens:
@@ -255,6 +256,7 @@ class TtsDataModule:
             return_audio_tokens=self.args.use_audio_tokens,
             audio_token_dir=self.args.audio_token_dir,
             audio_token_pad=self.args.audio_token_pad,
+            return_features=not self.args.use_audio_tokens,
         )
         if self.args.use_audio_tokens:
           validate = AudioTokenWrapper(validate, token_dir=self.args.audio_token_dir)
@@ -290,6 +292,7 @@ class TtsDataModule:
             return_audio_tokens=self.args.use_audio_tokens,
             audio_token_dir=self.args.audio_token_dir,
             audio_token_pad=self.args.audio_token_pad,
+            return_features=not self.args.use_audio_tokens,
         )
         if self.args.use_audio_tokens:
           test = AudioTokenWrapper(validate, token_dir=self.args.audio_token_dir)
