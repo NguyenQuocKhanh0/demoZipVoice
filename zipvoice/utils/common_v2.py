@@ -212,7 +212,7 @@ def prepare_input(
     batch: dict,
     device: torch.device,
     return_tokens: bool = True,
-    return_feature: bool = True,
+    return_feature: bool = False,
     return_audio: bool = False,
     return_audio_tokens: bool = False,   # <-- thêm
 ):
