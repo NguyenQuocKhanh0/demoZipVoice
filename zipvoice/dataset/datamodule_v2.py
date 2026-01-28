@@ -183,7 +183,12 @@ class TtsDataModule:
             feature_input_strategy=OnTheFlyFeatures(VocosFbank())
             if self.args.on_the_fly_feats
             else PrecomputedFeatures(),
-            return_cuts=True,   # <-- bắt buộc để wrapper lấy cut.id
+            return_cuts=self.args.return_cuts,   # có thể giữ nguyên
+        
+            # NEW
+            return_audio_tokens=self.args.use_audio_tokens,
+            audio_token_dir=self.args.audio_token_dir,
+            audio_token_pad=self.args.audio_token_pad,
         )
         
         if self.args.use_audio_tokens:
@@ -238,7 +243,12 @@ class TtsDataModule:
             feature_input_strategy=OnTheFlyFeatures(VocosFbank())
             if self.args.on_the_fly_feats
             else PrecomputedFeatures(),
-            return_cuts=True,   # <-- bắt buộc để wrapper lấy cut.id
+            return_cuts=self.args.return_cuts,   # có thể giữ nguyên
+        
+            # NEW
+            return_audio_tokens=self.args.use_audio_tokens,
+            audio_token_dir=self.args.audio_token_dir,
+            audio_token_pad=self.args.audio_token_pad,
         )
         if self.args.use_audio_tokens:
           validate = AudioTokenWrapper(validate, token_dir=self.args.audio_token_dir)
@@ -268,9 +278,15 @@ class TtsDataModule:
             feature_input_strategy=OnTheFlyFeatures(VocosFbank())
             if self.args.on_the_fly_feats
             else PrecomputedFeatures(),
-            return_cuts=self.args.return_cuts,
-            return_audio=True,
+            return_cuts=self.args.return_cuts,   # có thể giữ nguyên
+        
+            # NEW
+            return_audio_tokens=self.args.use_audio_tokens,
+            audio_token_dir=self.args.audio_token_dir,
+            audio_token_pad=self.args.audio_token_pad,
         )
+        if self.args.use_audio_tokens:
+          test = AudioTokenWrapper(validate, token_dir=self.args.audio_token_dir)
         test_sampler = DynamicBucketingSampler(
             cuts,
             max_duration=self.args.max_duration,
