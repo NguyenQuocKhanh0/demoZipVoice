@@ -158,8 +158,14 @@ class TtsDataModule:
         group.add_argument(
             "--use-audio-tokens",
             type=str2bool,
-            default=False,
+            default=True,
             help="Nếu True: train target là audio tokens thay vì fbank/mel.",
+        )
+        group.add_argument(
+            "--audio-token-pad",
+            type=int,
+            default=0,
+            help="Pad value cho audio tokens (thường 0).",
         )
 
     def train_dataloaders(
