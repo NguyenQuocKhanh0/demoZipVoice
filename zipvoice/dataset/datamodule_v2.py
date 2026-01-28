@@ -33,8 +33,8 @@ from lhotse.dataset.input_strategies import OnTheFlyFeatures, PrecomputedFeature
 from lhotse.utils import fix_random_seed
 from torch.utils.data import DataLoader
 
-from zipvoice.dataset.dataset import SpeechSynthesisDataset
-from zipvoice.utils.common import str2bool
+from zipvoice.dataset.dataset_v2 import SpeechSynthesisDataset
+from zipvoice.utils.common_v2 import str2bool
 from zipvoice.utils.feature import VocosFbank
 
 
