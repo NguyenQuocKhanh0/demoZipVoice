@@ -94,7 +94,7 @@ def lengths_to_mask(lengths: torch.Tensor, max_len: int) -> torch.Tensor:
 # -------------------------
 # Model
 # -------------------------
-from __future__ import annotations
+
 
 from typing import List, Optional, Tuple
 
