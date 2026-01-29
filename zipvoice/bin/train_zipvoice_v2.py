@@ -577,7 +577,7 @@ def train_one_epoch(
                     params=params,
                     model=model,
                     audio_tokens=audio_tokens,
-                    features_lens=features_lens,
+                    audio_tokens_lens=features_lens,
                     tokens=tokens,
                     is_training=True,
                 )
@@ -722,8 +722,8 @@ def compute_validation_loss(
         loss, loss_info = compute_token_loss(
             params=params,
             model=model,
-            features=features,
-            features_lens=features_lens,
+            audio_tokens=features,
+            audio_tokens_lens=features_lens,
             tokens=tokens,
             is_training=False,
         )
@@ -799,7 +799,7 @@ def scan_pessimistic_batches_for_oom(
                     params=params,
                     model=model,
                     audio_tokens=audio_tokens,
-                    features_lens=features_lens,
+                    audio_tokens_lens=features_lens,
                     tokens=tokens,
                     is_training=True,
                 )
