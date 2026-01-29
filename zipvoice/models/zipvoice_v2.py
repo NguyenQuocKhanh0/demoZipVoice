@@ -448,6 +448,7 @@ class ZipVoiceTokenTTS(nn.Module):
             guidance_scale=guidance_scale,
             t_shift=t_shift,
         )  # [B,T,F]
+        print("x1: ", x1)
 
         # bỏ prompt khỏi output length
         pred_lens = (~padding_mask).sum(-1) - prompt_features_lens  # [B]
@@ -503,7 +504,7 @@ class ZipVoiceTokenTTS(nn.Module):
             dtype=torch.int64,
             device=device,
         )
-        print(prompt_tokens_lens)
+        print("prompt_tokens_lens: ", prompt_tokens_lens)
         tokens_lens = torch.tensor(
             [len(t) for t in tokens],
             dtype=torch.int64,
