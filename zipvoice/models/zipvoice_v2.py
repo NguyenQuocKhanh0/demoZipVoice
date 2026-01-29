@@ -523,7 +523,7 @@ class ZipVoiceTokenTTS(nn.Module):
         # ratio = len(tokens) / len(prompt_tokens)
         ratio = tokens_lens.float() / prompt_tokens_lens.float()
     
-        features_lens = torch.ceil(
+        features_lens = prompt_features_lens + torch.ceil(
             prompt_features_lens.float() * ratio
         ).to(dtype=torch.int64)
         # ==========================
