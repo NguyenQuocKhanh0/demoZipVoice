@@ -21,7 +21,7 @@ from qwen_tts.core.tokenizer_12hz.modeling_qwen3_tts_tokenizer_v2 import (
     Qwen3TTSTokenizerV2EncoderOutput,
 )
 
-from zipvoice.models.zipvoice_token_tts import ZipVoiceTokenTTS  # <-- model token-based của bạn
+from zipvoice.models.zipvoice_v2 import ZipVoiceTokenTTS  # <-- model token-based của bạn
 from zipvoice.tokenizer.tokenizer import (
     EmiliaTokenizer,
     EspeakTokenizer,
@@ -29,7 +29,7 @@ from zipvoice.tokenizer.tokenizer import (
     SimpleTokenizer,
 )
 from zipvoice.utils.checkpoint import load_checkpoint
-from zipvoice.utils.common import AttributeDict
+from zipvoice.utils.common_v2 import AttributeDict
 
 HUGGINGFACE_REPO = "k2-fsa/ZipVoice"
 MODEL_DIR = {
