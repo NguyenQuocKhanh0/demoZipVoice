@@ -493,40 +493,36 @@ class ZipVoiceTokenTTS(nn.Module):
         num_space_prompt=[-1],
     ):
         device = self.device if isinstance(self, DDP) else next(self.parameters()).device
-
+    
         cat_tokens = [p + t for p, t in zip(prompt_tokens, tokens)]
-
-        prompt_tokens_lens = torch.tensor([len(t) for t in prompt_tokens], dtype=torch.int64, device=device)
-        tokens_lens = torch.tensor([len(t) for t in tokens], dtype=torch.int64, device=device)
-
-        prompt_space_lens = torch.tensor(
-            [(score_tokens(tok) - (tok.count(3) - ns - 1) + tok.count(8) * 0.5) * 100
-             for tok, ns in zip(prompt_tokens, num_space_prompt)],
+    
+        # token lengths (Long)
+        prompt_tokens_lens = torch.tensor(
+            [len(t) for t in prompt_tokens],
             dtype=torch.int64,
             device=device,
         )
-        tokens_space_lens = torch.tensor(
-            [(score_tokens(tok) - (tok.count(3) - ns - 1) + tok.count(8) * 0.5) * 100
-             for tok, ns in zip(tokens, num_space_text)],
+        tokens_lens = torch.tensor(
+            [len(t) for t in tokens],
             dtype=torch.int64,
             device=device,
         )
-
+    
         cat_embed, cat_tokens_lens = self.forward_text_embed(cat_tokens)
-
-        def alpha(x: float) -> float:
-            if x <= 1:
-                return 1.1
-            elif x >= 30:
-                return 1.03
-            else:
-                return 1.1 - (x - 1) / (30 - 1) * (1.1 - 1.03)
-
-        features_lens = prompt_features_lens + torch.ceil(
-            (prompt_features_lens / prompt_space_lens * tokens_space_lens / speed * alpha(float(tokens_space_lens.float().mean().item()) / 100.0))
+    
+        # ===== 핵심 수정 부분 =====
+        # ratio = len(tokens) / len(prompt_tokens)
+        ratio = tokens_lens.float() / prompt_tokens_lens.float()
+    
+        features_lens = torch.ceil(
+            prompt_features_lens.float() * ratio
         ).to(dtype=torch.int64)
-        print(prompt_features_lens)
-        print(features_lens)
-
-        text_condition, padding_mask = self.forward_text_condition(cat_embed, cat_tokens_lens, features_lens)
+        # ==========================
+    
+        print("prompt_features_lens:", prompt_features_lens)
+        print("features_lens:", features_lens)
+    
+        text_condition, padding_mask = self.forward_text_condition(
+            cat_embed, cat_tokens_lens, features_lens
+        )
         return text_condition, padding_mask
