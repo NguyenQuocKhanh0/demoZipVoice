@@ -77,7 +77,7 @@ class SpeechSynthesisDataset(torch.utils.data.Dataset):
         K = None
 
         for cut in cuts:
-            print(cut)
+            # print(cut)
             p = self.audio_token_dir / f"{cut.id}{self.audio_token_ext}"
             if not p.is_file():
                 raise FileNotFoundError(f"Missing audio token file: {p}")
