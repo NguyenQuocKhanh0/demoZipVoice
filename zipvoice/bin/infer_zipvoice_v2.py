@@ -99,7 +99,7 @@ def text_to_ids(text_tokenizer, text: str):
     Ở dataset bạn đang dùng phoneme, nên ưu tiên split.
     """
     toks = list(text)
-    ids = text_tokenizer.tokens_to_token_ids([chars])[0]
+    ids = text_tokenizer.tokens_to_token_ids([toks])[0]
     # heuristics: nếu có space và token_file của bạn là phoneme -> dùng split
     return ids
 
