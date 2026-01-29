@@ -525,6 +525,8 @@ class ZipVoiceTokenTTS(nn.Module):
         features_lens = prompt_features_lens + torch.ceil(
             (prompt_features_lens / prompt_space_lens * tokens_space_lens / speed * alpha(float(tokens_space_lens.float().mean().item()) / 100.0))
         ).to(dtype=torch.int64)
+        print(prompt_features_lens)
+        print(features_lens)
 
         text_condition, padding_mask = self.forward_text_condition(cat_embed, cat_tokens_lens, features_lens)
         return text_condition, padding_mask
