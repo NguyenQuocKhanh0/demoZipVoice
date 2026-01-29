@@ -172,7 +172,7 @@ def generate_sentence_token(
         tokens=tokens,
         prompt_tokens=prompt_tokens,
         prompt_audio_tokens=prompt_codes,
-        prompt_audio_tokens_lens=prompt_codes_lens,
+        prompt_features_lens=prompt_codes_lens,
         speed=speed,
         t_shift=t_shift,
         duration="predict",
