@@ -183,6 +183,7 @@ def generate_sentence_token(
     # pred_codes: [1, T, 16] long ; pred_lens: [1]
 
     t = (dt.datetime.now() - start_t).total_seconds()
+    print(pred_codes)
 
     # decode Qwen codes -> wav
     pred0 = pred_codes[0, : pred_lens[0]].detach().to("cpu").long().contiguous()
