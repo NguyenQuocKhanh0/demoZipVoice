@@ -94,8 +94,80 @@ def lengths_to_mask(lengths: torch.Tensor, max_len: int) -> torch.Tensor:
 # -------------------------
 # Model
 # -------------------------
+from __future__ import annotations
+
+from typing import List, Optional, Tuple
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+# Assumed to exist in your repo (same as your current code):
+# - TTSZipformer
+# - Qwen3TTSTokenizerV2EncoderOutput
+# - pad_labels, make_pad_mask, lengths_to_mask
+# - prepare_avg_tokens_durations, get_tokens_index
+# - condition_time_mask
+
+
+class PromptEncoder(nn.Module):
+    """
+    Encode prompt acoustic features -> speaker embedding (global).
+    Lightweight attentive pooling + MLP.
+
+    Input:
+      x:    [B, T, F]
+      mask: [B, T] bool (True = valid)
+    Output:
+      spk: [B, Dspk]
+    """
+
+    def __init__(self, feat_dim: int, spk_dim: int = 256, attn_dim: int = 256, dropout: float = 0.1):
+        super().__init__()
+        self.pre = nn.Sequential(
+            nn.LayerNorm(feat_dim),
+            nn.Linear(feat_dim, feat_dim),
+            nn.SiLU(),
+            nn.Dropout(dropout),
+        )
+
+        self.attn_h = nn.Linear(feat_dim, attn_dim)
+        self.attn_v = nn.Linear(attn_dim, 1)
+
+        self.spk_proj = nn.Sequential(
+            nn.Linear(feat_dim, spk_dim),
+            nn.SiLU(),
+            nn.Linear(spk_dim, spk_dim),
+        )
+
+    def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+        # x: [B,T,F], mask: [B,T] bool
+        x = self.pre(x)
+
+        h = torch.tanh(self.attn_h(x))                      # [B,T,A]
+        scores = self.attn_v(h).squeeze(-1)                 # [B,T]
+        scores = scores.masked_fill(~mask, -1e4)
+        w = torch.softmax(scores, dim=-1)                   # [B,T]
+
+        pooled = torch.einsum("bt,btf->bf", w, x)          # [B,F]
+        spk = self.spk_proj(pooled)                         # [B,Dspk]
+        return spk
+
+
 class ZipVoiceTokenTTS(nn.Module):
-    """ZipVoice sửa để train/sampling theo audio token (16 codebooks, vocab=2048)."""
+    """
+    ZipVoice sửa để train/sampling theo audio token (16 codebooks, vocab=2048).
+
+    Input/Output giữ nguyên so với code bạn:
+      - forward(tokens, audio_tokens, features_lens, noise, t, condition_drop_ratio) -> loss
+      - sample(tokens, prompt_tokens, prompt_audio_tokens, prompt_features_lens, ...) -> (QwenEncOut, pred_lens)
+
+    Các cải tiến chính để voice cloning tốt hơn:
+      1) Conditioning additive + FiLM theo speaker embedding (PromptEncoder), thay vì concat 3x dim.
+      2) Token head tách per-codebook + weight tying với embedding.
+      3) CE loss đánh vào x1_hat = xt + (1-t)*vt (kéo output của flow lên manifold decodable).
+      4) Sampling hard-inpaint prefix prompt (khóa prompt frames mỗi step) để giảm “trôi giọng”.
+    """
 
     def __init__(
         self,
@@ -116,10 +188,9 @@ class ZipVoiceTokenTTS(nn.Module):
         value_head_dim: int = 12,
         pos_head_dim: int = 4,
         pos_dim: int = 48,
-        feat_dim: int = 256,          # <-- khuyến nghị tăng lên (mel thường 80-100; token-feature nên lớn hơn)
+        feat_dim: int = 512,  # <-- tăng mặc định để giữ thông tin “giọng” tốt hơn
         vocab_size: int = 26,
         pad_id: int = 0,
-
         # --- token config ---
         num_codebooks: int = 16,
         codebook_vocab: int = 2048,
@@ -128,22 +199,20 @@ class ZipVoiceTokenTTS(nn.Module):
     ):
         super().__init__()
 
-        self.fm_decoder = TTSZipformer(
-            in_dim=feat_dim * 3,
-            out_dim=feat_dim,
-            downsampling_factor=fm_decoder_downsampling_factor,
-            num_encoder_layers=fm_decoder_num_layers,
-            cnn_module_kernel=fm_decoder_cnn_module_kernel,
-            encoder_dim=fm_decoder_dim,
-            feedforward_dim=fm_decoder_feedforward_dim,
-            num_heads=fm_decoder_num_heads,
-            query_head_dim=query_head_dim,
-            pos_head_dim=pos_head_dim,
-            value_head_dim=value_head_dim,
-            pos_dim=pos_dim,
-            use_time_embed=True,
-            time_embed_dim=time_embed_dim,
-        )
+        self.feat_dim = feat_dim
+        self.text_embed_dim = text_embed_dim
+        self.pad_id = pad_id
+
+        # --- audio token config ---
+        self.num_codebooks = num_codebooks
+        self.codebook_vocab = codebook_vocab
+        self.codebook_emb_dim = codebook_emb_dim
+        self.token_ce_weight = token_ce_weight
+
+        # -------------------------
+        # Text path (giữ logic cũ)
+        # -------------------------
+        self.embed = nn.Embedding(vocab_size, text_embed_dim)
 
         self.text_encoder = TTSZipformer(
             in_dim=text_embed_dim,
@@ -161,33 +230,101 @@ class ZipVoiceTokenTTS(nn.Module):
             use_time_embed=False,
         )
 
-        self.feat_dim = feat_dim
-        self.text_embed_dim = text_embed_dim
-        self.pad_id = pad_id
-
-        self.embed = nn.Embedding(vocab_size, text_embed_dim)
-        self.solver = EulerSolver(self, func_name="forward_fm_decoder")
-
-        # --- audio token -> continuous feature ---
-        self.num_codebooks = num_codebooks
-        self.codebook_vocab = codebook_vocab
-        self.codebook_emb_dim = codebook_emb_dim
-        self.token_ce_weight = token_ce_weight
-
+        # -------------------------
+        # Audio token <-> feature
+        # -------------------------
         self.audio_codebook_emb = nn.ModuleList(
             [nn.Embedding(codebook_vocab, codebook_emb_dim) for _ in range(num_codebooks)]
         )
-        self.audio_in_proj = nn.Linear(num_codebooks * codebook_emb_dim, feat_dim)
 
-        # --- continuous feature -> token logits ---
-        self.audio_out_proj = nn.Linear(feat_dim, num_codebooks * codebook_vocab)
+        in_cat_dim = num_codebooks * codebook_emb_dim  # e.g. 16*64=1024
+        self.audio_in_proj = nn.Identity() if feat_dim == in_cat_dim else nn.Linear(in_cat_dim, feat_dim)
+        # Residual “mixing” nhẹ để model học tương tác giữa các codebook
+        self.audio_in_mlp = nn.Sequential(
+            nn.LayerNorm(feat_dim),
+            nn.Linear(feat_dim, feat_dim * 2),
+            nn.SiLU(),
+            nn.Linear(feat_dim * 2, feat_dim),
+        )
+
+        # Token head per-codebook + weight tying (logits = dot(proj(feat), emb_k.weight))
+        self.audio_to_cb = nn.ModuleList([nn.Linear(feat_dim, codebook_emb_dim) for _ in range(num_codebooks)])
+
+        # -------------------------
+        # PromptEncoder + FiLM (speaker embedding)
+        # -------------------------
+        self.prompt_encoder = PromptEncoder(feat_dim=feat_dim, spk_dim=256, attn_dim=256, dropout=0.1)
+        self.film_gamma = nn.Linear(256, feat_dim)
+        self.film_beta = nn.Linear(256, feat_dim)
+
+        # Additive conditioning projections
+        self.text_proj = nn.Sequential(nn.LayerNorm(feat_dim), nn.Linear(feat_dim, feat_dim))
+        self.speech_proj = nn.Sequential(nn.LayerNorm(feat_dim), nn.Linear(feat_dim, feat_dim))
+
+        # -------------------------
+        # Flow-matching decoder (đổi in_dim: không concat 3x nữa)
+        # -------------------------
+        self.fm_decoder = TTSZipformer(
+            in_dim=feat_dim,
+            out_dim=feat_dim,
+            downsampling_factor=fm_decoder_downsampling_factor,
+            num_encoder_layers=fm_decoder_num_layers,
+            cnn_module_kernel=fm_decoder_cnn_module_kernel,
+            encoder_dim=fm_decoder_dim,
+            feedforward_dim=fm_decoder_feedforward_dim,
+            num_heads=fm_decoder_num_heads,
+            query_head_dim=query_head_dim,
+            pos_head_dim=pos_head_dim,
+            value_head_dim=value_head_dim,
+            pos_dim=pos_dim,
+            use_time_embed=True,
+            time_embed_dim=time_embed_dim,
+        )
+
+    # -------------------------
+    # helpers
+    # -------------------------
+    def _device(self) -> torch.device:
+        return next(self.parameters()).device
+
+    @staticmethod
+    def _as_time_tensor(t: torch.Tensor | float, B: int, device: torch.device) -> torch.Tensor:
+        if not torch.is_tensor(t):
+            t = torch.tensor(float(t), device=device)
+        if t.dim() == 0:
+            t = t.view(1, 1, 1).repeat(B, 1, 1)
+        elif t.dim() == 1:
+            t = t.view(B, 1, 1)
+        return t
+
+    @staticmethod
+    def _mask_from_lens(lens: torch.Tensor, T: int) -> torch.Tensor:
+        # returns [B,T] bool valid mask
+        return lengths_to_mask(lens, T)
+
+    def _compute_spk_embed(self, prompt_feat: torch.Tensor, prompt_valid: torch.Tensor) -> torch.Tensor:
+        """
+        prompt_feat:  [B,T,F]
+        prompt_valid: [B,T] bool
+        """
+        # nếu prompt quá ngắn / rỗng (hiếm), tránh NaN softmax:
+        if prompt_valid.sum().item() == 0:
+            return torch.zeros(prompt_feat.size(0), 256, device=prompt_feat.device, dtype=prompt_feat.dtype)
+        return self.prompt_encoder(prompt_feat, prompt_valid)
+
+    def _apply_film(self, x: torch.Tensor, spk_embed: Optional[torch.Tensor]) -> torch.Tensor:
+        if spk_embed is None:
+            return x
+        gamma = self.film_gamma(spk_embed).unsqueeze(1)  # [B,1,F]
+        beta = self.film_beta(spk_embed).unsqueeze(1)    # [B,1,F]
+        return x * (1.0 + gamma) + beta
 
     # -------------------------
     # audio token <-> feature
     # -------------------------
     def audio_tokens_to_features(self, audio_tokens: torch.Tensor, lens: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
-        audio_tokens: [B,T,K] int64  (K=16)
+        audio_tokens: [B,T,K] int64
         lens: [B] optional
         return: [B,T,feat_dim] float
         """
@@ -199,7 +336,9 @@ class ZipVoiceTokenTTS(nn.Module):
         for k in range(self.num_codebooks):
             embs.append(self.audio_codebook_emb[k](audio_tokens[:, :, k]))  # [B,T,D]
         x = torch.cat(embs, dim=-1)  # [B,T,K*D]
-        feat = self.audio_in_proj(x)  # [B,T,feat_dim]
+
+        feat = self.audio_in_proj(x)  # [B,T,F]
+        feat = feat + 0.1 * self.audio_in_mlp(feat)
 
         if lens is not None:
             valid = lengths_to_mask(lens, T).unsqueeze(-1)  # [B,T,1]
@@ -212,25 +351,29 @@ class ZipVoiceTokenTTS(nn.Module):
         return: [B,T,K,V]
         """
         B, T, _ = features.shape
-        logits = self.audio_out_proj(features)  # [B,T,K*V]
-        return logits.view(B, T, self.num_codebooks, self.codebook_vocab)
+        logits_k = []
+        for k in range(self.num_codebooks):
+            h = self.audio_to_cb[k](features)                          # [B,T,D]
+            W = self.audio_codebook_emb[k].weight                     # [V,D]
+            lk = torch.einsum("btd,vd->btv", h, W)                    # [B,T,V]
+            logits_k.append(lk)
+        return torch.stack(logits_k, dim=2)  # [B,T,K,V]
 
     def features_to_audio_tokens(self, features: torch.Tensor) -> torch.Tensor:
         """
         argmax decode
         return: [B,T,K] int64
         """
-        logits = self.features_to_audio_logits(features)
+        logits = self.features_to_audio_logits(features)  # [B,T,K,V]
         return logits.argmax(dim=-1)
 
     def to_qwen_encoder_output(
         self,
         audio_tokens: torch.Tensor,
         lens: torch.Tensor,
-    ) -> Qwen3TTSTokenizerV2EncoderOutput:
+    ) -> "Qwen3TTSTokenizerV2EncoderOutput":
         """
         Convert padded [B,T,K] + lens -> Qwen3TTSTokenizerV2EncoderOutput(audio_codes=[...])
-        Qwen decode thường nhận list length B, mỗi tensor shape [T_i, K].
         """
         codes_list = []
         for i in range(audio_tokens.size(0)):
@@ -239,7 +382,7 @@ class ZipVoiceTokenTTS(nn.Module):
         return Qwen3TTSTokenizerV2EncoderOutput(audio_codes=codes_list)
 
     # -------------------------
-    # Original functions giữ nguyên (text)
+    # Core FM decoder call (additive cond + speaker FiLM)
     # -------------------------
     def forward_fm_decoder(
         self,
@@ -248,37 +391,51 @@ class ZipVoiceTokenTTS(nn.Module):
         text_condition: torch.Tensor,
         speech_condition: torch.Tensor,
         padding_mask: Optional[torch.Tensor] = None,
-        guidance_scale: Optional[torch.Tensor] = None,
+        guidance_scale: Optional[torch.Tensor | float] = None,
+        spk_embed: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        xt = torch.cat([xt, text_condition, speech_condition], dim=2)
+        """
+        t:  [B,1,1] or scalar
+        xt: [B,T,F]
+        text_condition/speech_condition: [B,T,F]
+        spk_embed: [B,256] optional
+        """
+        B = xt.size(0)
+        device = xt.device
 
-        assert t.dim() in (0, 3)
-        while t.dim() > 1 and t.size(-1) == 1:
-            t = t.squeeze(-1)
-        if t.dim() == 0:
-            t = t.repeat(xt.shape[0])
+        t = self._as_time_tensor(t, B, device)
+
+        # additive conditioning
+        xt_in = xt + self.text_proj(text_condition) + self.speech_proj(speech_condition)
+        xt_in = self._apply_film(xt_in, spk_embed)
+
+        # guidance_scale handling (keep backward compatible)
+        if guidance_scale is not None and not torch.is_tensor(guidance_scale):
+            guidance_scale = torch.tensor(float(guidance_scale), device=device)
 
         if guidance_scale is not None:
+            # normalize dims for your fm_decoder impl
             while guidance_scale.dim() > 1 and guidance_scale.size(-1) == 1:
                 guidance_scale = guidance_scale.squeeze(-1)
             if guidance_scale.dim() == 0:
-                guidance_scale = guidance_scale.repeat(xt.shape[0])
+                guidance_scale = guidance_scale.repeat(B)
 
-            vt = self.fm_decoder(
-                x=xt, t=t, padding_mask=padding_mask, guidance_scale=guidance_scale
-            )
+            vt = self.fm_decoder(x=xt_in, t=t.squeeze(-1).squeeze(-1), padding_mask=padding_mask, guidance_scale=guidance_scale)
         else:
-            vt = self.fm_decoder(x=xt, t=t, padding_mask=padding_mask)
+            vt = self.fm_decoder(x=xt_in, t=t.squeeze(-1).squeeze(-1), padding_mask=padding_mask)
         return vt
 
+    # -------------------------
+    # Text path (giữ nguyên logic)
+    # -------------------------
     def forward_text_embed(self, tokens: List[List[int]]):
-        device = self.device if isinstance(self, DDP) else next(self.parameters()).device
+        device = self._device()
         tokens_padded = pad_labels(tokens, pad_id=self.pad_id, device=device)  # (B,S)
         embed = self.embed(tokens_padded)  # (B,S,C)
         tokens_lens = torch.tensor([len(t) for t in tokens], dtype=torch.int64, device=device)
         tokens_padding_mask = make_pad_mask(tokens_lens, embed.shape[1])  # (B,S)
 
-        embed = self.text_encoder(x=embed, t=None, padding_mask=tokens_padding_mask)  # (B,S,C)
+        embed = self.text_encoder(x=embed, t=None, padding_mask=tokens_padding_mask)  # (B,S,F)
         return embed, tokens_lens
 
     def forward_text_condition(self, embed: torch.Tensor, tokens_lens: torch.Tensor, features_lens: torch.Tensor):
@@ -313,37 +470,47 @@ class ZipVoiceTokenTTS(nn.Module):
         condition_drop_ratio: float = 0.0,
     ) -> torch.Tensor:
         """
-        Train flow-matching trên feature liên tục sinh từ token + thêm CE để map feature -> token.
+        Train rectified flow-matching trên feature liên tục sinh từ token.
+        + CE trên x1_hat để kéo output flow về manifold decodable.
+        + Speaker FiLM từ prompt (phần không masked) để tăng bám giọng.
         """
-
         device = audio_tokens.device
         B, T, K = audio_tokens.shape
         assert K == self.num_codebooks
 
-        # 1) token -> feature (GT)
+        # 1) token -> feature (GT latent)
         features = self.audio_tokens_to_features(audio_tokens, lens=features_lens)  # [B,T,F]
 
         # 2) text condition + padding mask
         text_condition, padding_mask = self.forward_text_train(tokens=tokens, features_lens=features_lens)
 
-        # 3) speech_condition theo mask như code cũ
+        # 3) tạo speech_condition mask như code cũ (masked phần cần generate)
         speech_condition_mask = condition_time_mask(
             features_lens=features_lens,
             mask_percent=(0.7, 1.0),
             max_len=features.size(1),
-        )
+        )  # [B,T] True = masked (to-generate)
+
         speech_condition = torch.where(speech_condition_mask.unsqueeze(-1), 0, features)
 
-        # classifier-free guidance train
+        # prompt frames = phần không masked & valid
+        valid_bt = lengths_to_mask(features_lens, T)                   # [B,T]
+        prompt_valid = (~speech_condition_mask) & (~padding_mask) & valid_bt
+        prompt_feat = torch.where(prompt_valid.unsqueeze(-1), features, torch.zeros_like(features))
+        spk_embed = self._compute_spk_embed(prompt_feat, prompt_valid)
+
+        # classifier-free guidance train (drop text + drop speaker cùng lúc để model học chế độ)
         if condition_drop_ratio > 0.0:
-            drop_mask = (torch.rand(B, 1, 1, device=device) > condition_drop_ratio)
+            drop_mask = (torch.rand(B, 1, 1, device=device) > condition_drop_ratio).to(features.dtype)
             text_condition = text_condition * drop_mask
+            # drop speaker
+            spk_drop = drop_mask.squeeze(-1).squeeze(-1)  # [B]
+            spk_embed = spk_embed * spk_drop.unsqueeze(-1)
 
         # 4) noise + t
         if noise is None:
             noise = torch.randn_like(features)
         if t is None:
-            # [B,1,1] uniform (0,1)
             t = torch.rand(B, 1, 1, device=device)
 
         xt = features * t + noise * (1 - t)
@@ -355,24 +522,87 @@ class ZipVoiceTokenTTS(nn.Module):
             text_condition=text_condition,
             speech_condition=speech_condition,
             padding_mask=padding_mask,
+            spk_embed=spk_embed,
         )
 
-        loss_mask = speech_condition_mask & (~padding_mask)
+        # fm loss chỉ tính ở vùng masked & valid
+        loss_mask = speech_condition_mask & (~padding_mask) & valid_bt
         fm_loss = torch.mean((vt[loss_mask] - ut[loss_mask]) ** 2)
 
-        # 5) CE loss: decode GT feature -> token (để đảm bảo feature-space decodable)
-        logits = self.features_to_audio_logits(features)  # [B,T,K,V]
-        valid = lengths_to_mask(features_lens, T)  # [B,T]
+        # 5) CE loss trên x1_hat (quan trọng để sampling ra token ổn định)
+        # rectified flow identity: x1_hat = xt + (1-t)*vt
+        x1_hat = xt + (1 - t) * vt  # [B,T,F]
 
-        logits_flat = logits[valid]        # [N,K,V]
-        target_flat = audio_tokens[valid]  # [N,K]
+        logits_hat = self.features_to_audio_logits(x1_hat)  # [B,T,K,V]
 
-        ce = 0.0
-        for k in range(K):
-            ce = ce + F.cross_entropy(logits_flat[:, k, :], target_flat[:, k])
-        ce = ce / K
+        # CE chỉ ở vùng model cần generate (masked)
+        ce_mask = loss_mask
+        if ce_mask.any():
+            logits_flat = logits_hat[ce_mask]        # [N,K,V]
+            target_flat = audio_tokens[ce_mask]      # [N,K]
+            ce = 0.0
+            for k in range(K):
+                ce = ce + F.cross_entropy(logits_flat[:, k, :], target_flat[:, k])
+            ce = ce / K
+        else:
+            ce = torch.tensor(0.0, device=device, dtype=features.dtype)
 
         return fm_loss + self.token_ce_weight * ce
+
+    # -------------------------
+    # Sampling utilities (Euler ODE solver + hard inpaint prompt)
+    # -------------------------
+    @staticmethod
+    def _time_schedule(num_step: int, device: torch.device, t_shift: float = 1.0) -> torch.Tensor:
+        # [num_step+1] from 0 -> 1
+        ts = torch.linspace(0.0, 1.0, num_step + 1, device=device)
+        if t_shift is not None and float(t_shift) != 1.0:
+            ts = ts ** float(t_shift)
+        return ts
+
+    @torch.no_grad()
+    def _euler_sample_with_inpaint(
+        self,
+        x0: torch.Tensor,                 # [B,T,F]
+        text_condition: torch.Tensor,      # [B,T,F]
+        speech_condition: torch.Tensor,    # [B,T,F] (prompt padded at prefix, zeros elsewhere)
+        padding_mask: torch.Tensor,        # [B,T] True=pad
+        prompt_features_lens: torch.Tensor,# [B]
+        num_step: int,
+        guidance_scale: float,
+        t_shift: float,
+        spk_embed: Optional[torch.Tensor],
+    ) -> torch.Tensor:
+        device = x0.device
+        B, T, Fdim = x0.shape
+
+        # known prefix mask: positions < prompt_len
+        idx = torch.arange(T, device=device).unsqueeze(0).expand(B, T)
+        known_mask = idx < prompt_features_lens.unsqueeze(1)           # [B,T] True = clamp to prompt
+        prompt_padded = speech_condition                               # has prompt in prefix already
+
+        ts = self._time_schedule(num_step=num_step, device=device, t_shift=t_shift)
+
+        x = x0
+        for i in range(num_step):
+            t_i = ts[i].view(1, 1, 1).repeat(B, 1, 1)  # [B,1,1]
+            dt = (ts[i + 1] - ts[i])
+
+            v = self.forward_fm_decoder(
+                t=t_i,
+                xt=x,
+                text_condition=text_condition,
+                speech_condition=speech_condition,
+                padding_mask=padding_mask,
+                guidance_scale=guidance_scale,
+                spk_embed=spk_embed,
+            )
+            x = x + dt * v
+
+            # hard inpaint prompt prefix to avoid voice drift
+            x = torch.where(known_mask.unsqueeze(-1), prompt_padded, x)
+
+        return x  # approx x1 at t=1
 
     # -------------------------
     # Sampling: text + prompt_audio_tokens -> pred_audio_tokens
@@ -392,18 +622,22 @@ class ZipVoiceTokenTTS(nn.Module):
         guidance_scale: float = 0.5,
         num_space_text=[-1],
         num_space_prompt=[-1],
-    ) -> Tuple[Qwen3TTSTokenizerV2EncoderOutput, torch.Tensor]:
+    ) -> Tuple["Qwen3TTSTokenizerV2EncoderOutput", torch.Tensor]:
         """
         Return:
           enc_out: Qwen3TTSTokenizerV2EncoderOutput(audio_codes=[T_i,16] ...)
           pred_lens: [B]
         """
-
         assert duration in ["real", "predict"]
         device = prompt_audio_tokens.device
 
         # prompt token -> feature
         prompt_features = self.audio_tokens_to_features(prompt_audio_tokens, lens=prompt_features_lens)  # [B,Tp,F]
+
+        # speaker embedding from prompt (global)
+        B, Tp, _ = prompt_features.shape
+        prompt_valid = lengths_to_mask(prompt_features_lens, Tp)  # [B,Tp]
+        spk_embed = self._compute_spk_embed(prompt_features, prompt_valid)
 
         # predict total length như code cũ
         if duration == "predict":
@@ -426,56 +660,61 @@ class ZipVoiceTokenTTS(nn.Module):
 
         batch_size, num_frames, _ = text_condition.shape
 
-        speech_condition = torch.nn.functional.pad(
-            prompt_features, (0, 0, 0, num_frames - prompt_features.size(1))
-        )  # (B,T,F)
+        # pad prompt_features to full length
+        speech_condition = F.pad(prompt_features, (0, 0, 0, num_frames - prompt_features.size(1)))  # [B,T,F]
 
-        speech_condition_mask = make_pad_mask(prompt_features_lens, num_frames)
+        # zero out beyond prompt_len (safety)
+        speech_condition_mask = make_pad_mask(prompt_features_lens, num_frames)  # True after Tp
         speech_condition = torch.where(
             speech_condition_mask.unsqueeze(-1),
             torch.zeros_like(speech_condition),
             speech_condition,
         )
 
+        # start from noise
         x0 = torch.randn(batch_size, num_frames, self.feat_dim, device=device)
 
-        x1 = self.solver.sample(
-            x=x0,
+        # hard inpaint at init too
+        idx = torch.arange(num_frames, device=device).unsqueeze(0).expand(batch_size, num_frames)
+        known_mask = idx < prompt_features_lens.unsqueeze(1)
+        x0 = torch.where(known_mask.unsqueeze(-1), speech_condition, x0)
+
+        # Euler ODE + hard inpaint each step
+        x1 = self._euler_sample_with_inpaint(
+            x0=x0,
             text_condition=text_condition,
             speech_condition=speech_condition,
             padding_mask=padding_mask,
+            prompt_features_lens=prompt_features_lens,
             num_step=num_step,
             guidance_scale=guidance_scale,
             t_shift=t_shift,
+            spk_embed=spk_embed,
         )  # [B,T,F]
-        print("x1: ", x1)
 
         # bỏ prompt khỏi output length
         pred_lens = (~padding_mask).sum(-1) - prompt_features_lens  # [B]
 
         # tách phần không prompt
-        max_out = int(pred_lens.max().item())
+        max_out = int(pred_lens.max().clamp(min=0).item())
         x1_wo_prompt = torch.zeros(batch_size, max_out, self.feat_dim, device=device)
+
         for i in range(batch_size):
-            Ti = int(pred_lens[i].item())
+            Ti = int(pred_lens[i].clamp(min=0).item())
+            if Ti == 0:
+                continue
             start = int(prompt_features_lens[i].item())
             x1_wo_prompt[i, :Ti] = x1[i, start : start + Ti]
 
         # feature -> token
         pred_tokens_padded = self.features_to_audio_tokens(x1_wo_prompt)  # [B, max_out, 16]
-        print("pred_tokens_padded: ", pred_tokens_padded )
-        print("padding_mask sum:", (~padding_mask).sum(-1))
-        print("prompt_features_lens:", prompt_features_lens)
-        print("pred_lens:", pred_lens)
-        print("num_frames:", num_frames)
-
 
         # convert to Qwen output (list per sample)
-        enc_out = self.to_qwen_encoder_output(pred_tokens_padded, pred_lens)
+        enc_out = self.to_qwen_encoder_output(pred_tokens_padded, pred_lens.clamp(min=0))
         return enc_out, pred_lens
 
     # -------------------------
-    # Giữ nguyên 2 hàm duration inference từ code của bạn (paste lại nguyên xi)
+    # Duration inference (giữ nguyên 2 hàm như bạn)
     # -------------------------
     def forward_text_inference_gt_duration(
         self,
@@ -499,39 +738,19 @@ class ZipVoiceTokenTTS(nn.Module):
         num_space_text=[-1],
         num_space_prompt=[-1],
     ):
-        device = self.device if isinstance(self, DDP) else next(self.parameters()).device
-    
+        device = self._device()
+
         cat_tokens = [p + t for p, t in zip(prompt_tokens, tokens)]
-        print(prompt_tokens)
-    
-        # token lengths (Long)
-        prompt_tokens_lens = torch.tensor(
-            [len(t) for t in prompt_tokens],
-            dtype=torch.int64,
-            device=device,
-        )
-        print("prompt_tokens_lens: ", prompt_tokens_lens)
-        tokens_lens = torch.tensor(
-            [len(t) for t in tokens],
-            dtype=torch.int64,
-            device=device,
-        )
-    
+
+        prompt_tokens_lens = torch.tensor([len(t) for t in prompt_tokens], dtype=torch.int64, device=device)
+        tokens_lens = torch.tensor([len(t) for t in tokens], dtype=torch.int64, device=device)
+
         cat_embed, cat_tokens_lens = self.forward_text_embed(cat_tokens)
-    
-        # ===== 핵심 수정 부분 =====
-        # ratio = len(tokens) / len(prompt_tokens)
-        ratio = tokens_lens.float() / prompt_tokens_lens.float()
-    
-        features_lens = prompt_features_lens + torch.ceil(
-            prompt_features_lens.float() * ratio
-        ).to(dtype=torch.int64)
-        # ==========================
-    
-        print("prompt_features_lens:", prompt_features_lens)
-        print("features_lens:", features_lens)
-    
-        text_condition, padding_mask = self.forward_text_condition(
-            cat_embed, cat_tokens_lens, features_lens
-        )
+
+        ratio = tokens_lens.float() / prompt_tokens_lens.float().clamp(min=1.0)
+
+        features_lens = prompt_features_lens + torch.ceil(prompt_features_lens.float() * ratio).to(dtype=torch.int64)
+
+        text_condition, padding_mask = self.forward_text_condition(cat_embed, cat_tokens_lens, features_lens)
         return text_condition, padding_mask
+
