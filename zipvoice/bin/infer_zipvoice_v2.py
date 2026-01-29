@@ -186,9 +186,9 @@ def generate_sentence_token(
     print(pred_codes)
 
     # decode Qwen codes -> wav
-    pred0 = pred_codes[0, : pred_lens[0]].detach().to("cpu").long().contiguous()
-    enc_out = Qwen3TTSTokenizerV2EncoderOutput(audio_codes=[pred0])
-    wavs, sr = qwen_tokenizer.decode(enc_out)
+    # pred0 = pred_codes[0, : pred_lens[0]].detach().to("cpu").long().contiguous()
+    # enc_out = Qwen3TTSTokenizerV2EncoderOutput(audio_codes=[pred0])
+    wavs, sr = qwen_tokenizer.decode(pred_codes)
     wav = wavs[0]
     sf.write(save_path, wav, sr)
 
