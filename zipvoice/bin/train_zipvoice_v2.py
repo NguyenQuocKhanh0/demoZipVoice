@@ -425,30 +425,41 @@ def get_params() -> AttributeDict:
 def compute_token_loss(
     params: AttributeDict,
     model: Union[nn.Module, DDP],
-    audio_tokens: Tensor,        # [B,T,16] long
-    audio_tokens_lens: Tensor,   # [B]
+    audio_tokens: torch.Tensor,        # [B,T,16] long
+    audio_tokens_lens: torch.Tensor,   # [B]
     tokens: List[List[int]],
     is_training: bool,
-) -> Tuple[Tensor, MetricsTracker]:
+) -> Tuple[torch.Tensor, MetricsTracker]:
 
     device = model.device if isinstance(model, DDP) else next(model.parameters()).device
     B = audio_tokens.shape[0]
 
-    # sampling t
+    # --- 안정성: tránh t sát 0/1 ---
+    t_eps = getattr(params, "t_eps", 1e-3)
+
     if is_training:
         t = torch.rand(B, 1, 1, device=device)
+        t = t * (1.0 - 2.0 * t_eps) + t_eps
     else:
-        t = (torch.arange(B, device=device) / B).unsqueeze(1).unsqueeze(2)
+        # midpoint stratified t in (0,1)
+        t = ((torch.arange(B, device=device) + 0.5) / B).view(B, 1, 1)
+        t = t.clamp(t_eps, 1.0 - t_eps)
+
+    # --- CFG dropout: chỉ training ---
+    cond_drop = params.condition_drop_ratio if is_training else 0.0
+
+    # (Optional) đảm bảo dtype đúng
+    if audio_tokens.dtype != torch.long:
+        audio_tokens = audio_tokens.long()
 
     with torch.set_grad_enabled(is_training):
-        # noise=None để model tự tạo noise đúng shape [B,T,feat_dim]
         loss = model(
             tokens=tokens,
             audio_tokens=audio_tokens,
             features_lens=audio_tokens_lens,
             noise=None,
             t=t,
-            condition_drop_ratio=params.condition_drop_ratio,
+            condition_drop_ratio=cond_drop,
         )
 
     info = MetricsTracker()
@@ -456,6 +467,7 @@ def compute_token_loss(
     info["frames"] = num_frames
     info["loss"] = loss.detach().cpu().item() * num_frames
     return loss, info
+
 
 
 
