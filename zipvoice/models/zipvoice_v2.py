@@ -495,6 +495,7 @@ class ZipVoiceTokenTTS(nn.Module):
         device = self.device if isinstance(self, DDP) else next(self.parameters()).device
     
         cat_tokens = [p + t for p, t in zip(prompt_tokens, tokens)]
+        print(prompt_tokens)
     
         # token lengths (Long)
         prompt_tokens_lens = torch.tensor(
@@ -502,6 +503,7 @@ class ZipVoiceTokenTTS(nn.Module):
             dtype=torch.int64,
             device=device,
         )
+        print(prompt_tokens_lens)
         tokens_lens = torch.tensor(
             [len(t) for t in tokens],
             dtype=torch.int64,
