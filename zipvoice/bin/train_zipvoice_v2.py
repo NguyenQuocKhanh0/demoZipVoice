@@ -716,7 +716,7 @@ def compute_validation_loss(
             batch=batch,
             device=device,
             return_tokens=True,
-            return_feature=True,
+            return_feature=False,
         )
 
         loss, loss_info = compute_token_loss(
