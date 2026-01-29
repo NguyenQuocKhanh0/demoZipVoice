@@ -17,7 +17,7 @@
     "pos_dim" : 48,
     "time_embed_dim" : 192,
     "text_embed_dim" : 192,
-    "feat_dim": 100
+    "feat_dim": 512
   },
   "feature" : {
     "sampling_rate": 24000,
