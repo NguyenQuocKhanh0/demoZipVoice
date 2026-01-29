@@ -214,7 +214,7 @@ def prepare_input(
     return_tokens: bool = True,
     return_feature: bool = False,
     return_audio: bool = False,
-    return_audio_tokens: bool = False,   # <-- thêm
+    return_audio_tokens: bool = True,   # <-- thêm
 ):
     return_list = []
 
