@@ -463,6 +463,7 @@ class ZipVoiceTokenTTS(nn.Module):
 
         # feature -> token
         pred_tokens_padded = self.features_to_audio_tokens(x1_wo_prompt)  # [B, max_out, 16]
+        print("pred_tokens_padded: ", pred_tokens_padded )
 
         # convert to Qwen output (list per sample)
         enc_out = self.to_qwen_encoder_output(pred_tokens_padded, pred_lens)
