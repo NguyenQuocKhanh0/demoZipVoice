@@ -394,36 +394,59 @@ class ZipVoiceTokenTTS(nn.Module):
         guidance_scale: Optional[torch.Tensor | float] = None,
         spk_embed: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        """
-        t:  [B,1,1] or scalar
-        xt: [B,T,F]
-        text_condition/speech_condition: [B,T,F]
-        spk_embed: [B,256] optional
-        """
         B = xt.size(0)
         device = xt.device
-
+    
+        # chuẩn hoá t -> [B]
         t = self._as_time_tensor(t, B, device)
-
-        # additive conditioning
-        xt_in = xt + self.text_proj(text_condition) + self.speech_proj(speech_condition)
-        xt_in = self._apply_film(xt_in, spk_embed)
-
-        # guidance_scale handling (keep backward compatible)
-        if guidance_scale is not None and not torch.is_tensor(guidance_scale):
-            guidance_scale = torch.tensor(float(guidance_scale), device=device)
-
-        if guidance_scale is not None:
-            # normalize dims for your fm_decoder impl
-            while guidance_scale.dim() > 1 and guidance_scale.size(-1) == 1:
-                guidance_scale = guidance_scale.squeeze(-1)
-            if guidance_scale.dim() == 0:
-                guidance_scale = guidance_scale.repeat(B)
-
-            vt = self.fm_decoder(x=xt_in, t=t.squeeze(-1).squeeze(-1), padding_mask=padding_mask, guidance_scale=guidance_scale)
+        t_vec = t.squeeze(-1).squeeze(-1)  # [B]
+    
+        # base: luôn có speech_condition
+        xt_base = xt + self.speech_proj(speech_condition)
+        xt_base = self._apply_film(xt_base, spk_embed)
+    
+        # conditional: thêm text
+        xt_cond = xt_base + self.text_proj(text_condition)
+    
+        # nếu không dùng CFG -> chạy 1 lần
+        if guidance_scale is None:
+            return self.fm_decoder(x=xt_cond, t=t_vec, padding_mask=padding_mask)
+    
+        # nếu Zipformer có guidance_scale_embed thật sự -> dùng nội bộ (tránh 2-pass)
+        gse = getattr(self.fm_decoder, "guidance_scale_embed", None)
+        if gse is not None:
+            # convert guidance_scale -> tensor [B]
+            if torch.is_tensor(guidance_scale):
+                gs = guidance_scale.to(device)
+                while gs.dim() > 1 and gs.size(-1) == 1:
+                    gs = gs.squeeze(-1)
+                if gs.dim() == 0:
+                    gs = gs.repeat(B)
+            else:
+                gs = torch.full((B,), float(guidance_scale), device=device)
+    
+            return self.fm_decoder(
+                x=xt_cond, t=t_vec, padding_mask=padding_mask, guidance_scale=gs
+            )
+    
+        # ---- External CFG (2-pass) ----
+        # uncond: drop text_condition (speaker/prompt vẫn giữ)
+        v_uncond = self.fm_decoder(x=xt_base, t=t_vec, padding_mask=padding_mask)
+        v_cond = self.fm_decoder(x=xt_cond, t=t_vec, padding_mask=padding_mask)
+    
+        # gs -> [B,1,1] để broadcast
+        if torch.is_tensor(guidance_scale):
+            gs = guidance_scale.to(device)
+            while gs.dim() > 1 and gs.size(-1) == 1:
+                gs = gs.squeeze(-1)
+            if gs.dim() == 0:
+                gs = gs.repeat(B)
         else:
-            vt = self.fm_decoder(x=xt_in, t=t.squeeze(-1).squeeze(-1), padding_mask=padding_mask)
-        return vt
+            gs = torch.full((B,), float(guidance_scale), device=device)
+    
+        gs = gs.view(B, 1, 1)
+        return v_uncond + gs * (v_cond - v_uncond)
+
 
     # -------------------------
     # Text path (giữ nguyên logic)
